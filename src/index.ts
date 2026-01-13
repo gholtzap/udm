@@ -3,6 +3,7 @@ dotenv.config();
 
 import express, { Request, Response } from 'express';
 import { initializeMongoDB } from './db/mongodb';
+import { authRateLimiter } from './middleware/rate-limit';
 import eeRouter from './routers/nudm-ee';
 import mtRouter from './routers/nudm-mt';
 import niddauRouter from './routers/nudm-niddau';
@@ -30,7 +31,7 @@ app.use('/nudm-pp/v1', ppRouter);
 app.use('/nudm-rsds/v1', rsdsRouter);
 app.use('/nudm-sdm/v2', sdmRouter);
 app.use('/nudm-ssau/v1', ssauRouter);
-app.use('/nudm-ueau/v1', ueauRouter);
+app.use('/nudm-ueau/v1', authRateLimiter, ueauRouter);
 app.use('/nudm-uecm/v1', uecmRouter);
 app.use('/nudm-ueid/v1', ueidRouter);
 
@@ -38,7 +39,8 @@ const startServer = async () => {
   try {
     await initializeMongoDB();
     console.log('MongoDB connected successfully');
-    
+    console.log('Rate limiting enabled for authentication endpoints (nudm-ueau)');
+
     app.listen(PORT, () => {
       console.log(`nUDM server is running on port ${PORT}`);
     });

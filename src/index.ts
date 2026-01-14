@@ -19,7 +19,7 @@ import { Server } from 'http';
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 app.get('/health', (req: Request, res: Response) => {
   res.json({ status: 'ok' });

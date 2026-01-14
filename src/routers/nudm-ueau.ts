@@ -166,7 +166,6 @@ router.post('/:supiOrSuci/security-information/generate-auth-data', async (req: 
   }, 'Accessed subscriber cryptographic keys for authentication');
 
   if (authRequest.resynchronizationInfo) {
-    console.log('[UDM RESYNC] Resynchronization requested');
     auditLog('resynchronization_request', {
       supi: supi,
       rand: authRequest.resynchronizationInfo.rand
@@ -195,7 +194,6 @@ router.post('/:supiOrSuci/security-information/generate-auth-data', async (req: 
     const sqnMsInt = parseInt(sqnMs, 16);
     const newSqnInt = (sqnMsInt + 32);
     sequenceNumber = newSqnInt.toString(16).padStart(12, '0').toUpperCase();
-    console.log('[UDM RESYNC] Sequence number resynchronized');
     auditLog('resynchronization_success', {
       supi: supi,
       new_sequence_number: sequenceNumber

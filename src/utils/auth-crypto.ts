@@ -1,5 +1,6 @@
 import { createHmac, randomBytes } from 'crypto';
 import Milenage from 'milenage';
+import logger from './logger';
 
 export function generateRand(): string {
   return randomBytes(16).toString('hex').toUpperCase();
@@ -134,7 +135,7 @@ export function computeKasme(ck: Buffer, ik: Buffer, plmnId: Buffer, sqnXorAk: B
 
 export function processAuts(k: Buffer, op: Buffer, rand: Buffer, auts: Buffer, amf: Buffer): string | null {
   if (auts.length !== 14) {
-    console.error('[UDM AUTS] Invalid AUTS length:', auts.length, '(expected 14)');
+    logger.error('Invalid AUTS length', { length: auts.length, expected: 14 });
     return null;
   }
 
@@ -155,7 +156,7 @@ export function processAuts(k: Buffer, op: Buffer, rand: Buffer, auts: Buffer, a
   const expectedMacS = Buffer.from(f1starResult.mac_s);
 
   if (!receivedMacS.equals(expectedMacS)) {
-    console.error('[UDM AUTS] MAC-S validation failed');
+    logger.error('MAC-S validation failed');
     return null;
   }
 

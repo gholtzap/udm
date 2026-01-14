@@ -1,5 +1,6 @@
 import rateLimit from 'express-rate-limit';
 import { Request, Response } from 'express';
+import logger from '../utils/logger';
 
 interface RateLimitStore {
   [key: string]: {
@@ -56,7 +57,11 @@ function recordFailure(identifier: string): void {
 
   record.backoffUntil = Date.now() + backoffMs;
 
-  console.log(`Rate limit backoff applied for ${identifier}: ${backoffMs}ms (failures: ${record.failures})`);
+  logger.warn('Rate limit backoff applied', {
+    identifier,
+    backoff_ms: backoffMs,
+    failures: record.failures
+  });
 }
 
 export const authRateLimiter = rateLimit({

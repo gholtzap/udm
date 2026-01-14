@@ -27,8 +27,8 @@ import {
   LocationInfo,
   RegistrationLocationInfo
 } from '../types/nudm-uecm-types';
-import { 
-  validateUeIdentity, 
+import {
+  validateUeIdentity,
   createInvalidParameterError,
   createMissingParameterError,
   Snssai,
@@ -37,6 +37,7 @@ import {
   PatchResult,
   AccessType
 } from '../types/common-types';
+import logger from '../utils/logger';
 
 const router = Router();
 
@@ -213,7 +214,7 @@ router.get('/:ueId/registrations', async (req: Request, res: Response) => {
 
     return res.status(200).json(registrationDataSets);
   } catch (error) {
-    console.error('Error retrieving registration data:', error);
+    logger.error('Error retrieving registration data', { error });
     return res.status(500).json({
       type: 'urn:3gpp:error:system',
       title: 'Internal Server Error',
@@ -274,7 +275,7 @@ router.post('/:ueId/registrations/send-routing-info-sm', async (req: Request, re
 
     return res.status(200).json(response);
   } catch (error) {
-    console.error('Error retrieving SMS routing information:', error);
+    logger.error('Error retrieving SMS routing information', { error });
     return res.status(500).json({
       type: 'urn:3gpp:error:system',
       title: 'Internal Server Error',
@@ -329,7 +330,7 @@ router.put('/:ueId/registrations/amf-3gpp-access', async (req: Request, res: Res
       return res.status(200).json(registrationData);
     }
   } catch (error) {
-    console.error('Error creating/updating AMF 3GPP registration:', error);
+    logger.error('Error creating/updating AMF 3GPP registration', { error });
     return res.status(500).json({
       type: 'urn:3gpp:error:system',
       title: 'Internal Server Error',
@@ -374,7 +375,7 @@ router.patch('/:ueId/registrations/amf-3gpp-access', async (req: Request, res: R
 
     return res.status(204).send();
   } catch (error) {
-    console.error('Error updating AMF 3GPP registration:', error);
+    logger.error('Error updating AMF 3GPP registration', { error });
     return res.status(500).json({
       type: 'urn:3gpp:error:system',
       title: 'Internal Server Error',
@@ -409,7 +410,7 @@ router.get('/:ueId/registrations/amf-3gpp-access', async (req: Request, res: Res
 
     return res.status(200).json(registration);
   } catch (error) {
-    console.error('Error retrieving AMF 3GPP registration:', error);
+    logger.error('Error retrieving AMF 3GPP registration', { error });
     return res.status(500).json({
       type: 'urn:3gpp:error:system',
       title: 'Internal Server Error',
@@ -454,7 +455,7 @@ router.post('/:ueId/registrations/amf-3gpp-access/dereg-amf', async (req: Reques
 
     return res.status(204).send();
   } catch (error) {
-    console.error('Error deregistering AMF 3GPP access:', error);
+    logger.error('Error deregistering AMF 3GPP access', { error });
     return res.status(500).json({
       type: 'urn:3gpp:error:system',
       title: 'Internal Server Error',
@@ -502,7 +503,7 @@ router.post('/:ueId/registrations/amf-3gpp-access/pei-update', async (req: Reque
 
     return res.status(204).send();
   } catch (error) {
-    console.error('Error updating PEI in AMF 3GPP registration:', error);
+    logger.error('Error updating PEI in AMF 3GPP registration', { error });
     return res.status(500).json({
       type: 'urn:3gpp:error:system',
       title: 'Internal Server Error',
@@ -571,7 +572,7 @@ router.post('/:ueId/registrations/amf-3gpp-access/roaming-info-update', async (r
       return res.status(204).send();
     }
   } catch (error) {
-    console.error('Error updating roaming information in AMF 3GPP registration:', error);
+    logger.error('Error updating roaming information in AMF 3GPP registration', { error });
     return res.status(500).json({
       type: 'urn:3gpp:error:system',
       title: 'Internal Server Error',
@@ -630,7 +631,7 @@ router.put('/:ueId/registrations/amf-non-3gpp-access', async (req: Request, res:
       return res.status(200).json(registrationData);
     }
   } catch (error) {
-    console.error('Error creating/updating AMF non-3GPP registration:', error);
+    logger.error('Error creating/updating AMF non-3GPP registration', { error });
     return res.status(500).json({
       type: 'urn:3gpp:error:system',
       title: 'Internal Server Error',
@@ -675,7 +676,7 @@ router.patch('/:ueId/registrations/amf-non-3gpp-access', async (req: Request, re
 
     return res.status(204).send();
   } catch (error) {
-    console.error('Error updating AMF non-3GPP registration:', error);
+    logger.error('Error updating AMF non-3GPP registration', { error });
     return res.status(500).json({
       type: 'urn:3gpp:error:system',
       title: 'Internal Server Error',
@@ -708,7 +709,7 @@ router.get('/:ueId/registrations/amf-non-3gpp-access', async (req: Request, res:
 
     return res.status(200).json(registration);
   } catch (error) {
-    console.error('Error retrieving AMF non-3GPP registration:', error);
+    logger.error('Error retrieving AMF non-3GPP registration', { error });
     return res.status(500).json({
       type: 'urn:3gpp:error:system',
       title: 'Internal Server Error',
@@ -784,7 +785,7 @@ router.get('/:ueId/registrations/smf-registrations', async (req: Request, res: R
 
     return res.status(200).json(smfRegistrationInfo);
   } catch (error) {
-    console.error('Error retrieving SMF registration:', error);
+    logger.error('Error retrieving SMF registration', { error });
     return res.status(500).json({
       type: 'urn:3gpp:error:system',
       title: 'Internal Server Error',
@@ -845,7 +846,7 @@ router.put('/:ueId/registrations/smf-registrations/:pduSessionId', async (req: R
       return res.status(200).json(registrationData);
     }
   } catch (error) {
-    console.error('Error creating/updating SMF registration:', error);
+    logger.error('Error creating/updating SMF registration', { error });
     return res.status(500).json({
       type: 'urn:3gpp:error:system',
       title: 'Internal Server Error',
@@ -906,7 +907,7 @@ router.delete('/:ueId/registrations/smf-registrations/:pduSessionId', async (req
 
     return res.status(204).send();
   } catch (error) {
-    console.error('Error deleting SMF registration:', error);
+    logger.error('Error deleting SMF registration', { error });
     return res.status(500).json({
       type: 'urn:3gpp:error:system',
       title: 'Internal Server Error',
@@ -944,7 +945,7 @@ router.get('/:ueId/registrations/smf-registrations/:pduSessionId', async (req: R
 
     return res.status(200).json(registration);
   } catch (error) {
-    console.error('Error retrieving SMF registration:', error);
+    logger.error('Error retrieving SMF registration', { error });
     return res.status(500).json({
       type: 'urn:3gpp:error:system',
       title: 'Internal Server Error',
@@ -994,7 +995,7 @@ router.patch('/:ueId/registrations/smf-registrations/:pduSessionId', async (req:
 
     return res.status(204).send();
   } catch (error) {
-    console.error('Error updating SMF registration:', error);
+    logger.error('Error updating SMF registration', { error });
     return res.status(500).json({
       type: 'urn:3gpp:error:system',
       title: 'Internal Server Error',
@@ -1045,7 +1046,7 @@ router.put('/:ueId/registrations/smsf-3gpp-access', async (req: Request, res: Re
       return res.status(200).json(registrationData);
     }
   } catch (error) {
-    console.error('Error creating/updating SMSF 3GPP registration:', error);
+    logger.error('Error creating/updating SMSF 3GPP registration', { error });
     return res.status(500).json({
       type: 'urn:3gpp:error:system',
       title: 'Internal Server Error',
@@ -1091,7 +1092,7 @@ router.delete('/:ueId/registrations/smsf-3gpp-access', async (req: Request, res:
 
     return res.status(204).send();
   } catch (error) {
-    console.error('Error deleting SMSF 3GPP registration:', error);
+    logger.error('Error deleting SMSF 3GPP registration', { error });
     return res.status(500).json({
       type: 'urn:3gpp:error:system',
       title: 'Internal Server Error',
@@ -1126,7 +1127,7 @@ router.get('/:ueId/registrations/smsf-3gpp-access', async (req: Request, res: Re
 
     return res.status(200).json(registration);
   } catch (error) {
-    console.error('Error retrieving SMSF 3GPP registration:', error);
+    logger.error('Error retrieving SMSF 3GPP registration', { error });
     return res.status(500).json({
       type: 'urn:3gpp:error:system',
       title: 'Internal Server Error',
@@ -1171,7 +1172,7 @@ router.patch('/:ueId/registrations/smsf-3gpp-access', async (req: Request, res: 
 
     return res.status(204).send();
   } catch (error) {
-    console.error('Error updating SMSF 3GPP registration:', error);
+    logger.error('Error updating SMSF 3GPP registration', { error });
     return res.status(500).json({
       type: 'urn:3gpp:error:system',
       title: 'Internal Server Error',
@@ -1222,7 +1223,7 @@ router.put('/:ueId/registrations/smsf-non-3gpp-access', async (req: Request, res
       return res.status(200).json(registrationData);
     }
   } catch (error) {
-    console.error('Error creating/updating SMSF non-3GPP registration:', error);
+    logger.error('Error creating/updating SMSF non-3GPP registration', { error });
     return res.status(500).json({
       type: 'urn:3gpp:error:system',
       title: 'Internal Server Error',
@@ -1268,7 +1269,7 @@ router.delete('/:ueId/registrations/smsf-non-3gpp-access', async (req: Request, 
 
     return res.status(204).send();
   } catch (error) {
-    console.error('Error deleting SMSF non-3GPP registration:', error);
+    logger.error('Error deleting SMSF non-3GPP registration', { error });
     return res.status(500).json({
       type: 'urn:3gpp:error:system',
       title: 'Internal Server Error',
@@ -1303,7 +1304,7 @@ router.get('/:ueId/registrations/smsf-non-3gpp-access', async (req: Request, res
 
     return res.status(200).json(registration);
   } catch (error) {
-    console.error('Error retrieving SMSF non-3GPP registration:', error);
+    logger.error('Error retrieving SMSF non-3GPP registration', { error });
     return res.status(500).json({
       type: 'urn:3gpp:error:system',
       title: 'Internal Server Error',
@@ -1348,7 +1349,7 @@ router.patch('/:ueId/registrations/smsf-non-3gpp-access', async (req: Request, r
 
     return res.status(204).send();
   } catch (error) {
-    console.error('Error updating SMSF non-3GPP registration:', error);
+    logger.error('Error updating SMSF non-3GPP registration', { error });
     return res.status(500).json({
       type: 'urn:3gpp:error:system',
       title: 'Internal Server Error',
@@ -1391,7 +1392,7 @@ router.put('/:ueId/registrations/ip-sm-gw', async (req: Request, res: Response) 
       return res.status(200).json(registrationData);
     }
   } catch (error) {
-    console.error('Error creating/updating IP-SM-GW registration:', error);
+    logger.error('Error creating/updating IP-SM-GW registration', { error });
     return res.status(500).json({
       type: 'urn:3gpp:error:system',
       title: 'Internal Server Error',
@@ -1426,7 +1427,7 @@ router.delete('/:ueId/registrations/ip-sm-gw', async (req: Request, res: Respons
 
     return res.status(204).send();
   } catch (error) {
-    console.error('Error deleting IP-SM-GW registration:', error);
+    logger.error('Error deleting IP-SM-GW registration', { error });
     return res.status(500).json({
       type: 'urn:3gpp:error:system',
       title: 'Internal Server Error',
@@ -1459,7 +1460,7 @@ router.get('/:ueId/registrations/ip-sm-gw', async (req: Request, res: Response) 
 
     return res.status(200).json(registration);
   } catch (error) {
-    console.error('Error retrieving IP-SM-GW registration:', error);
+    logger.error('Error retrieving IP-SM-GW registration', { error });
     return res.status(500).json({
       type: 'urn:3gpp:error:system',
       title: 'Internal Server Error',
@@ -1522,7 +1523,7 @@ router.post('/restore-pcscf', async (req: Request, res: Response) => {
           },
           body: JSON.stringify(notification)
         }).catch(error => {
-          console.error(`Failed to notify AMF 3GPP at ${amf3Gpp.pcscfRestorationCallbackUri}:`, error);
+          logger.error('Failed to notify AMF 3GPP', { uri: amf3Gpp.pcscfRestorationCallbackUri, error });
         })
       );
     }
@@ -1536,7 +1537,7 @@ router.post('/restore-pcscf', async (req: Request, res: Response) => {
           },
           body: JSON.stringify(notification)
         }).catch(error => {
-          console.error(`Failed to notify AMF Non-3GPP at ${amfNon3Gpp.pcscfRestorationCallbackUri}:`, error);
+          logger.error('Failed to notify AMF Non-3GPP', { uri: amfNon3Gpp.pcscfRestorationCallbackUri, error });
         })
       );
     }
@@ -1551,7 +1552,7 @@ router.post('/restore-pcscf', async (req: Request, res: Response) => {
             },
             body: JSON.stringify(notification)
           }).catch(error => {
-            console.error(`Failed to notify SMF at ${smfReg.pcscfRestorationCallbackUri}:`, error);
+            logger.error('Failed to notify SMF', { uri: smfReg.pcscfRestorationCallbackUri, error });
           })
         );
       }
@@ -1561,7 +1562,7 @@ router.post('/restore-pcscf', async (req: Request, res: Response) => {
 
     return res.status(204).send();
   } catch (error) {
-    console.error('Error triggering P-CSCF restoration:', error);
+    logger.error('Error triggering P-CSCF restoration', { error });
     return res.status(500).json({
       type: 'urn:3gpp:error:system',
       title: 'Internal Server Error',
@@ -1657,7 +1658,7 @@ router.get('/:ueId/registrations/location', async (req: Request, res: Response) 
 
     return res.status(200).json(locationInfo);
   } catch (error) {
-    console.error('Error retrieving location information:', error);
+    logger.error('Error retrieving location information', { error });
     return res.status(500).json({
       type: 'urn:3gpp:error:system',
       title: 'Internal Server Error',
@@ -1701,7 +1702,7 @@ router.get('/:ueId/registrations/nwdaf-registrations', async (req: Request, res:
 
     return res.status(200).json(registrations);
   } catch (error) {
-    console.error('Error retrieving NWDAF registrations:', error);
+    logger.error('Error retrieving NWDAF registrations', { error });
     return res.status(500).json({
       type: 'urn:3gpp:error:system',
       title: 'Internal Server Error',
@@ -1750,7 +1751,7 @@ router.put('/:ueId/registrations/nwdaf-registrations/:nwdafRegistrationId', asyn
       return res.status(200).json(registrationData);
     }
   } catch (error) {
-    console.error('Error creating/updating NWDAF registration:', error);
+    logger.error('Error creating/updating NWDAF registration', { error });
     return res.status(500).json({
       type: 'urn:3gpp:error:system',
       title: 'Internal Server Error',
@@ -1785,7 +1786,7 @@ router.delete('/:ueId/registrations/nwdaf-registrations/:nwdafRegistrationId', a
 
     return res.status(204).send();
   } catch (error) {
-    console.error('Error deleting NWDAF registration:', error);
+    logger.error('Error deleting NWDAF registration', { error });
     return res.status(500).json({
       type: 'urn:3gpp:error:system',
       title: 'Internal Server Error',
@@ -1830,7 +1831,7 @@ router.patch('/:ueId/registrations/nwdaf-registrations/:nwdafRegistrationId', as
 
     return res.status(204).send();
   } catch (error) {
-    console.error('Error updating NWDAF registration:', error);
+    logger.error('Error updating NWDAF registration', { error });
     return res.status(500).json({
       type: 'urn:3gpp:error:system',
       title: 'Internal Server Error',

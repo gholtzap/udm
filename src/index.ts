@@ -15,6 +15,7 @@ import ueauRouter from './routers/nudm-ueau';
 import uecmRouter from './routers/nudm-uecm';
 import ueidRouter from './routers/nudm-ueid';
 import { Server } from 'http';
+import logger from './utils/logger';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -39,24 +40,24 @@ app.use('/nudm-ueid/v1', ueidRouter);
 let server: Server;
 
 const gracefulShutdown = async (signal: string) => {
-  console.log(`${signal} received, starting graceful shutdown...`);
+  logger.info(`${signal} received, starting graceful shutdown...`);
 
   if (server) {
     server.close(async () => {
-      console.log('HTTP server closed');
+      logger.info('HTTP server closed');
 
       try {
         await closeConnection();
-        console.log('MongoDB connection closed');
+        logger.info('MongoDB connection closed');
         process.exit(0);
       } catch (error) {
-        console.error('Error closing MongoDB connection:', error);
+        logger.error('Error closing MongoDB connection:', { error });
         process.exit(1);
       }
     });
 
     setTimeout(() => {
-      console.error('Forced shutdown after timeout');
+      logger.error('Forced shutdown after timeout');
       process.exit(1);
     }, 30000);
   } else {
@@ -70,14 +71,14 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 const startServer = async () => {
   try {
     await initializeMongoDB();
-    console.log('MongoDB connected successfully');
-    console.log('Rate limiting enabled for authentication endpoints (nudm-ueau)');
+    logger.info('MongoDB connected successfully');
+    logger.info('Rate limiting enabled for authentication endpoints (nudm-ueau)');
 
     server = app.listen(PORT, () => {
-      console.log(`nUDM server is running on port ${PORT}`);
+      logger.info(`nUDM server is running on port ${PORT}`);
     });
   } catch (error) {
-    console.error('Failed to connect to MongoDB:', error);
+    logger.error('Failed to connect to MongoDB:', { error });
     process.exit(1);
   }
 };

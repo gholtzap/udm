@@ -15,6 +15,22 @@ export interface MilenageOutput {
 }
 
 export function milenage(k: Buffer, op: Buffer, rand: Buffer, sqn: Buffer, amf: Buffer): MilenageOutput {
+  if (k.length !== 16) {
+    throw new Error(`Invalid K length: ${k.length} (expected 16)`);
+  }
+  if (op.length !== 16) {
+    throw new Error(`Invalid OP length: ${op.length} (expected 16)`);
+  }
+  if (rand.length !== 16) {
+    throw new Error(`Invalid RAND length: ${rand.length} (expected 16)`);
+  }
+  if (sqn.length !== 6) {
+    throw new Error(`Invalid SQN length: ${sqn.length} (expected 6)`);
+  }
+  if (amf.length !== 2) {
+    throw new Error(`Invalid AMF length: ${amf.length} (expected 2)`);
+  }
+
   const mil = new Milenage({ op_c: new Uint8Array(op), key: new Uint8Array(k) });
 
   const f1Result = mil.f1(new Uint8Array(rand), new Uint8Array(sqn), new Uint8Array(amf));

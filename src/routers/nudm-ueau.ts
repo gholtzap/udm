@@ -103,8 +103,23 @@ router.post('/:supiOrSuci/security-information/generate-auth-data', async (req: 
     return res.status(400).json(createInvalidParameterError('Invalid SUPI format, must start with imsi-'));
   }
 
-  const subscribersCollection = getCollection<SubscriberData>('subscribers');
-  const subscriber = await subscribersCollection.findOne({ supi });
+  let subscriber: SubscriberData | null;
+  try {
+    const subscribersCollection = getCollection<SubscriberData>('subscribers');
+    subscriber = await subscribersCollection.findOne({ supi });
+  } catch (error) {
+    auditLog('auth_vector_generation_failed', {
+      supi: supi,
+      reason: 'database_error',
+      error: error instanceof Error ? error.message : String(error)
+    }, 'Auth vector generation failed: Database error');
+    return res.status(500).json({
+      type: 'urn:3gpp:error:internal-error',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'Database operation failed'
+    });
+  }
 
   if (!subscriber) {
     auditLog('auth_vector_generation_failed', {
@@ -228,17 +243,32 @@ router.post('/:supiOrSuci/security-information/generate-auth-data', async (req: 
 
   const newSqnInt = parseInt(sequenceNumber, 16) + 1;
   const newSqn = newSqnInt.toString(16).padStart(12, '0').toUpperCase();
-  
-  if (subscriber.subscribedData?.authenticationSubscription) {
-    await subscribersCollection.updateOne(
-      { supi },
-      { $set: { 'subscribedData.authenticationSubscription.sequenceNumber': newSqn } }
-    );
-  } else {
-    await subscribersCollection.updateOne(
-      { supi },
-      { $set: { sequenceNumber: newSqn } }
-    );
+
+  try {
+    const subscribersCollection = getCollection<SubscriberData>('subscribers');
+    if (subscriber.subscribedData?.authenticationSubscription) {
+      await subscribersCollection.updateOne(
+        { supi },
+        { $set: { 'subscribedData.authenticationSubscription.sequenceNumber': newSqn } }
+      );
+    } else {
+      await subscribersCollection.updateOne(
+        { supi },
+        { $set: { sequenceNumber: newSqn } }
+      );
+    }
+  } catch (error) {
+    auditLog('auth_vector_generation_failed', {
+      supi: supi,
+      reason: 'database_update_error',
+      error: error instanceof Error ? error.message : String(error)
+    }, 'Auth vector generation failed: Failed to update sequence number');
+    return res.status(500).json({
+      type: 'urn:3gpp:error:internal-error',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'Failed to update sequence number'
+    });
   }
 
   const authResult: AuthenticationInfoResult = {
@@ -274,8 +304,18 @@ router.get('/:supiOrSuci/security-information-rg', async (req: Request, res: Res
     return res.status(400).json(createInvalidParameterError('Invalid SUPI format, must start with imsi-'));
   }
 
-  const subscribersCollection = getCollection<SubscriberData>('subscribers');
-  const subscriber = await subscribersCollection.findOne({ supi });
+  let subscriber: SubscriberData | null;
+  try {
+    const subscribersCollection = getCollection<SubscriberData>('subscribers');
+    subscriber = await subscribersCollection.findOne({ supi });
+  } catch (error) {
+    return res.status(500).json({
+      type: 'urn:3gpp:error:internal-error',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'Database operation failed'
+    });
+  }
 
   if (!subscriber) {
     return res.status(404).json(createNotFoundError(`Subscriber with SUPI ${supi} not found`));
@@ -351,18 +391,25 @@ router.post('/:supi/auth-events', async (req: Request, res: Response) => {
     timestamp: authEvent.timeStamp
   }, `Authentication event received: ${authEvent.success ? 'SUCCESS' : 'FAILURE'}`);
 
-  const subscribersCollection = getCollection<SubscriberData>('subscribers');
-  const subscriber = await subscribersCollection.findOne({ supi });
+  let subscriber: SubscriberData | null;
+  try {
+    const subscribersCollection = getCollection<SubscriberData>('subscribers');
+    subscriber = await subscribersCollection.findOne({ supi });
+  } catch (error) {
+    return res.status(500).json({
+      type: 'urn:3gpp:error:internal-error',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'Database operation failed'
+    });
+  }
 
   if (!subscriber) {
     return res.status(404).json(createNotFoundError(`Subscriber with SUPI ${supi} not found`));
   }
 
-  // Generate unique authEventId
   const authEventId = randomUUID();
 
-  // Store the auth event in the database
-  const authEventsCollection = getCollection<AuthEvent & { authEventId: string; supi: string }>('authEvents');
   const authEventRecord = {
     authEventId,
     supi,
@@ -380,9 +427,18 @@ router.post('/:supi/auth-events', async (req: Request, res: Response) => {
     nswoInd: authEvent.nswoInd ?? false
   };
 
-  await authEventsCollection.insertOne(authEventRecord);
+  try {
+    const authEventsCollection = getCollection<AuthEvent & { authEventId: string; supi: string }>('authEvents');
+    await authEventsCollection.insertOne(authEventRecord);
+  } catch (error) {
+    return res.status(500).json({
+      type: 'urn:3gpp:error:internal-error',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'Failed to store authentication event'
+    });
+  }
 
-  // Set Location header with URI of newly created resource
   const location = `/nudm-ueau/v1/${supi}/auth-events/${authEventId}`;
   res.setHeader('Location', location);
 
@@ -446,15 +502,22 @@ router.post('/:supi/hss-security-information/:hssAuthType/generate-av', async (r
     return res.status(400).json(createInvalidParameterError('hssAuthType in request body does not match URI parameter'));
   }
 
-  // Check if subscriber exists
-  const subscribersCollection = getCollection<SubscriberData>('subscribers');
-  const subscriber = await subscribersCollection.findOne({ supi });
+  let subscriber: SubscriberData | null;
+  try {
+    const subscribersCollection = getCollection<SubscriberData>('subscribers');
+    subscriber = await subscribersCollection.findOne({ supi });
+  } catch (error) {
+    return res.status(500).json({
+      type: 'urn:3gpp:error:internal-error',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'Database operation failed'
+    });
+  }
 
   if (!subscriber) {
     return res.status(404).json(createNotFoundError(`Subscriber with SUPI ${supi} not found`));
   }
-
-  // Get authentication credentials
   let permanentKey: string;
   let operatorKey: string;
   let sequenceNumber: string;
@@ -610,17 +673,26 @@ router.post('/:supi/hss-security-information/:hssAuthType/generate-av', async (r
     currentSqn = sqnInt.toString(16).padStart(12, '0').toUpperCase();
   }
 
-  // Update the sequence number in the database
-  if (subscriber.subscribedData?.authenticationSubscription) {
-    await subscribersCollection.updateOne(
-      { supi },
-      { $set: { 'subscribedData.authenticationSubscription.sequenceNumber': currentSqn } }
-    );
-  } else {
-    await subscribersCollection.updateOne(
-      { supi },
-      { $set: { sequenceNumber: currentSqn } }
-    );
+  try {
+    const subscribersCollection = getCollection<SubscriberData>('subscribers');
+    if (subscriber.subscribedData?.authenticationSubscription) {
+      await subscribersCollection.updateOne(
+        { supi },
+        { $set: { 'subscribedData.authenticationSubscription.sequenceNumber': currentSqn } }
+      );
+    } else {
+      await subscribersCollection.updateOne(
+        { supi },
+        { $set: { sequenceNumber: currentSqn } }
+      );
+    }
+  } catch (error) {
+    return res.status(500).json({
+      type: 'urn:3gpp:error:internal-error',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'Failed to update sequence number'
+    });
   }
 
   const result: HssAuthenticationInfoResult = {
@@ -670,44 +742,71 @@ router.put('/:supi/auth-events/:authEventId', async (req: Request, res: Response
     return res.status(400).json(createInvalidParameterError('Invalid SUPI format, must start with imsi-'));
   }
 
-  // Check if subscriber exists
-  const subscribersCollection = getCollection<SubscriberData>('subscribers');
-  const subscriber = await subscribersCollection.findOne({ supi });
+  let subscriber: SubscriberData | null;
+  try {
+    const subscribersCollection = getCollection<SubscriberData>('subscribers');
+    subscriber = await subscribersCollection.findOne({ supi });
+  } catch (error) {
+    return res.status(500).json({
+      type: 'urn:3gpp:error:internal-error',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'Database operation failed'
+    });
+  }
 
   if (!subscriber) {
     return res.status(404).json(createNotFoundError(`Subscriber with SUPI ${supi} not found`));
   }
 
-  // Check if auth event exists
-  const authEventsCollection = getCollection<AuthEvent & { authEventId: string; supi: string }>('authEvents');
-  const existingAuthEvent = await authEventsCollection.findOne({ authEventId, supi });
+  let existingAuthEvent;
+  try {
+    const authEventsCollection = getCollection<AuthEvent & { authEventId: string; supi: string }>('authEvents');
+    existingAuthEvent = await authEventsCollection.findOne({ authEventId, supi });
+  } catch (error) {
+    return res.status(500).json({
+      type: 'urn:3gpp:error:internal-error',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'Database operation failed'
+    });
+  }
 
   if (!existingAuthEvent) {
     return res.status(404).json(createNotFoundError(`Auth event with ID ${authEventId} not found for SUPI ${supi}`));
   }
 
-  // Update the auth event record
-  const updateResult = await authEventsCollection.updateOne(
-    { authEventId, supi },
-    {
-      $set: {
-        nfInstanceId: authEvent.nfInstanceId,
-        success: authEvent.success,
-        timeStamp: authEvent.timeStamp,
-        authType: authEvent.authType,
-        servingNetworkName: authEvent.servingNetworkName,
-        authRemovalInd: authEvent.authRemovalInd ?? false,
-        nfSetId: authEvent.nfSetId,
-        resetIds: authEvent.resetIds,
-        dataRestorationCallbackUri: authEvent.dataRestorationCallbackUri,
-        udrRestartInd: authEvent.udrRestartInd ?? false,
-        lastSynchronizationTime: authEvent.lastSynchronizationTime,
-        nswoInd: authEvent.nswoInd ?? false
+  try {
+    const authEventsCollection = getCollection<AuthEvent & { authEventId: string; supi: string }>('authEvents');
+    const updateResult = await authEventsCollection.updateOne(
+      { authEventId, supi },
+      {
+        $set: {
+          nfInstanceId: authEvent.nfInstanceId,
+          success: authEvent.success,
+          timeStamp: authEvent.timeStamp,
+          authType: authEvent.authType,
+          servingNetworkName: authEvent.servingNetworkName,
+          authRemovalInd: authEvent.authRemovalInd ?? false,
+          nfSetId: authEvent.nfSetId,
+          resetIds: authEvent.resetIds,
+          dataRestorationCallbackUri: authEvent.dataRestorationCallbackUri,
+          udrRestartInd: authEvent.udrRestartInd ?? false,
+          lastSynchronizationTime: authEvent.lastSynchronizationTime,
+          nswoInd: authEvent.nswoInd ?? false
+        }
       }
-    }
-  );
+    );
 
-  if (updateResult.modifiedCount === 0) {
+    if (updateResult.modifiedCount === 0) {
+      return res.status(500).json({
+        type: 'urn:3gpp:error:internal-error',
+        title: 'Internal Server Error',
+        status: 500,
+        detail: 'Failed to update auth event'
+      });
+    }
+  } catch (error) {
     return res.status(500).json({
       type: 'urn:3gpp:error:internal-error',
       title: 'Internal Server Error',
@@ -716,7 +815,6 @@ router.put('/:supi/auth-events/:authEventId', async (req: Request, res: Response
     });
   }
 
-  // Return 204 No Content on successful update/deletion
   return res.status(204).send();
 });
 
@@ -744,15 +842,22 @@ router.post('/:supi/gba-security-information/generate-av', async (req: Request, 
     return res.status(400).json(createInvalidParameterError('Invalid SUPI format, must start with imsi-'));
   }
 
-  // Check if subscriber exists
-  const subscribersCollection = getCollection<SubscriberData>('subscribers');
-  const subscriber = await subscribersCollection.findOne({ supi });
+  let subscriber: SubscriberData | null;
+  try {
+    const subscribersCollection = getCollection<SubscriberData>('subscribers');
+    subscriber = await subscribersCollection.findOne({ supi });
+  } catch (error) {
+    return res.status(500).json({
+      type: 'urn:3gpp:error:internal-error',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'Database operation failed'
+    });
+  }
 
   if (!subscriber) {
     return res.status(404).json(createNotFoundError(`Subscriber with SUPI ${supi} not found`));
   }
-
-  // Get authentication credentials
   let permanentKey: string;
   let operatorKey: string;
   let sequenceNumber: string;
@@ -864,15 +969,22 @@ router.post('/:supiOrSuci/prose-security-information/generate-av', async (req: R
     return res.status(400).json(createInvalidParameterError('Invalid SUPI format, must start with imsi-'));
   }
 
-  // Check if subscriber exists
-  const subscribersCollection = getCollection<SubscriberData>('subscribers');
-  const subscriber = await subscribersCollection.findOne({ supi });
+  let subscriber: SubscriberData | null;
+  try {
+    const subscribersCollection = getCollection<SubscriberData>('subscribers');
+    subscriber = await subscribersCollection.findOne({ supi });
+  } catch (error) {
+    return res.status(500).json({
+      type: 'urn:3gpp:error:internal-error',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'Database operation failed'
+    });
+  }
 
   if (!subscriber) {
     return res.status(404).json(createNotFoundError(`Subscriber with SUPI ${supi} not found`));
   }
-
-  // Get authentication credentials
   let permanentKey: string;
   let operatorKey: string;
   let sequenceNumber: string;

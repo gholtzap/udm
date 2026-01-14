@@ -103,8 +103,19 @@ router.post('/:ueIdentity/:serviceType/authorize', async (req: Request<{ ueIdent
 
   const { snssai, dnn, mtcProviderInformation, authUpdateCallbackUri, afId, nefId } = body;
 
-  const userData = await findUserByIdentity(ueIdentity);
-  
+  let userData: SubscriptionData | null;
+  try {
+    userData = await findUserByIdentity(ueIdentity);
+  } catch (error) {
+    return res.status(500).json({
+      type: 'urn:3gpp:error:internal-error',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'Database operation failed',
+      cause: 'INTERNAL_ERROR'
+    } as ProblemDetails);
+  }
+
   if (!userData) {
     return res.status(404).json({
       type: 'urn:3gpp:error:user-not-found',
@@ -207,8 +218,18 @@ router.post('/:ueIdentity/:serviceType/authorize', async (req: Request<{ ueIdent
     authData.intGroupId = userData.internalGroupId;
   }
 
-  const authCollection = getCollection<StoredAuthorizationData>('ssau_authorizations');
-  await authCollection.insertOne(authData);
+  try {
+    const authCollection = getCollection<StoredAuthorizationData>('ssau_authorizations');
+    await authCollection.insertOne(authData);
+  } catch (error) {
+    return res.status(500).json({
+      type: 'urn:3gpp:error:internal-error',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'Failed to store authorization data',
+      cause: 'INTERNAL_ERROR'
+    } as ProblemDetails);
+  }
 
   const response: ServiceSpecificAuthorizationData = {
     authId
@@ -259,8 +280,19 @@ router.post('/:ueIdentity/:serviceType/remove', async (req: Request<{ ueIdentity
     return res.status(400).json(createMissingParameterError('Missing required field: authId') as any);
   }
 
-  const authCollection = getCollection<StoredAuthorizationData>('ssau_authorizations');
-  const authData = await authCollection.findOne({ _id: authId });
+  let authData: StoredAuthorizationData | null;
+  try {
+    const authCollection = getCollection<StoredAuthorizationData>('ssau_authorizations');
+    authData = await authCollection.findOne({ _id: authId });
+  } catch (error) {
+    return res.status(500).json({
+      type: 'urn:3gpp:error:internal-error',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'Database operation failed',
+      cause: 'INTERNAL_ERROR'
+    } as ProblemDetails);
+  }
 
   if (!authData) {
     return res.status(404).json({
@@ -282,7 +314,18 @@ router.post('/:ueIdentity/:serviceType/remove', async (req: Request<{ ueIdentity
     } as ProblemDetails);
   }
 
-  await authCollection.deleteOne({ _id: authId });
+  try {
+    const authCollection = getCollection<StoredAuthorizationData>('ssau_authorizations');
+    await authCollection.deleteOne({ _id: authId });
+  } catch (error) {
+    return res.status(500).json({
+      type: 'urn:3gpp:error:internal-error',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'Failed to delete authorization data',
+      cause: 'INTERNAL_ERROR'
+    } as ProblemDetails);
+  }
 
   res.status(204).send();
 });

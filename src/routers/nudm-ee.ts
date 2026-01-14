@@ -133,8 +133,17 @@ router.post('/:ueIdentity/ee-subscriptions', async (req: Request, res: Response)
     ...eeSubscription
   };
 
-  const collection = getCollection<StoredEeSubscription>('ee-subscriptions');
-  await collection.insertOne(storedSubscription);
+  try {
+    const collection = getCollection<StoredEeSubscription>('ee-subscriptions');
+    await collection.insertOne(storedSubscription);
+  } catch (error) {
+    return res.status(500).json({
+      type: 'urn:3gpp:error:internal-error',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'Failed to create subscription'
+    });
+  }
 
   const location = `/nudm-ee/v1/${ueIdentity}/ee-subscriptions/${subscriptionId}`;
 
@@ -155,20 +164,29 @@ router.delete('/:ueIdentity/ee-subscriptions/:subscriptionId', async (req: Reque
   }
 
   const key = `${ueIdentity}:${subscriptionId}`;
-  
-  const collection = getCollection<StoredEeSubscription>('ee-subscriptions');
-  const result = await collection.deleteOne({ _id: key });
-  
-  if (result.deletedCount === 0) {
-    return res.status(404).json({
-      type: 'urn:3gpp:error:not-found',
-      title: 'Not Found',
-      status: 404,
-      detail: 'Subscription not found',
-      cause: 'SUBSCRIPTION_NOT_FOUND'
+
+  try {
+    const collection = getCollection<StoredEeSubscription>('ee-subscriptions');
+    const result = await collection.deleteOne({ _id: key });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({
+        type: 'urn:3gpp:error:not-found',
+        title: 'Not Found',
+        status: 404,
+        detail: 'Subscription not found',
+        cause: 'SUBSCRIPTION_NOT_FOUND'
+      });
+    }
+  } catch (error) {
+    return res.status(500).json({
+      type: 'urn:3gpp:error:internal-error',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'Failed to delete subscription'
     });
   }
-  
+
   res.status(204).send();
 });
 
@@ -182,10 +200,20 @@ router.patch('/:ueIdentity/ee-subscriptions/:subscriptionId', async (req: Reques
   }
 
   const key = `${ueIdentity}:${subscriptionId}`;
-  
-  const collection = getCollection<StoredEeSubscription>('ee-subscriptions');
-  const subscription = await collection.findOne({ _id: key });
-  
+
+  let subscription: StoredEeSubscription | null;
+  try {
+    const collection = getCollection<StoredEeSubscription>('ee-subscriptions');
+    subscription = await collection.findOne({ _id: key });
+  } catch (error) {
+    return res.status(500).json({
+      type: 'urn:3gpp:error:internal-error',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'Database operation failed'
+    });
+  }
+
   if (!subscription) {
     return res.status(404).json({
       type: 'urn:3gpp:error:not-found',
@@ -242,7 +270,17 @@ router.patch('/:ueIdentity/ee-subscriptions/:subscriptionId', async (req: Reques
     }
   }
 
-  await collection.replaceOne({ _id: key }, subscription);
+  try {
+    const collection = getCollection<StoredEeSubscription>('ee-subscriptions');
+    await collection.replaceOne({ _id: key }, subscription);
+  } catch (error) {
+    return res.status(500).json({
+      type: 'urn:3gpp:error:internal-error',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'Failed to update subscription'
+    });
+  }
 
   if (failedOperations.length > 0 && hasPatchReportFeature) {
     return res.status(200).json({

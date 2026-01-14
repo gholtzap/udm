@@ -56,9 +56,19 @@ router.get('/:supi', async (req: Request, res: Response) => {
     return res.status(400).json(createInvalidParameterError('fields parameter must contain at least one item'));
   }
 
-  const collection = getCollection<StoredUeInfo>();
-  const ueInfo = await collection.findOne({ _id: supi });
-  
+  let ueInfo: StoredUeInfo | null;
+  try {
+    const collection = getCollection<StoredUeInfo>();
+    ueInfo = await collection.findOne({ _id: supi });
+  } catch (error) {
+    return res.status(500).json({
+      type: 'urn:3gpp:error:internal-error',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'Database operation failed'
+    } as ProblemDetails);
+  }
+
   if (!ueInfo) {
     return res.status(404).json({
       type: 'urn:3gpp:error:user-not-found',
@@ -120,9 +130,19 @@ router.post('/:supi/loc-info/provide-loc-info', async (req: Request, res: Respon
     supportedFeatures
   } = body;
 
-  const collection = getCollection<StoredUeInfo>();
-  const ueInfo = await collection.findOne({ _id: supi });
-  
+  let ueInfo: StoredUeInfo | null;
+  try {
+    const collection = getCollection<StoredUeInfo>();
+    ueInfo = await collection.findOne({ _id: supi });
+  } catch (error) {
+    return res.status(500).json({
+      type: 'urn:3gpp:error:internal-error',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'Database operation failed'
+    } as ProblemDetails);
+  }
+
   if (!ueInfo) {
     return res.status(404).json({
       type: 'urn:3gpp:error:user-not-found',

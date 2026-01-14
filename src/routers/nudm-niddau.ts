@@ -99,8 +99,19 @@ router.post('/:ueIdentity/authorize', async (req: Request<{ ueIdentity: string }
     return res.status(400).json(createMissingParameterError('Missing required field: authUpdateCallbackUri') as any);
   }
 
-  const userData = await findUserByIdentity(ueIdentity);
-  
+  let userData: SubscriptionData | null;
+  try {
+    userData = await findUserByIdentity(ueIdentity);
+  } catch (error) {
+    return res.status(500).json({
+      type: 'urn:3gpp:error:internal-error',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'Database operation failed',
+      cause: 'INTERNAL_ERROR'
+    } as ProblemDetails);
+  }
+
   if (!userData) {
     return res.status(404).json({
       type: 'urn:3gpp:error:user-not-found',
@@ -208,8 +219,18 @@ router.post('/:ueIdentity/authorize', async (req: Request<{ ueIdentity: string }
     createdAt: new Date()
   };
 
-  const authCollection = getCollection<StoredAuthorizationData>('niddau-authorizations');
-  await authCollection.insertOne(storedData);
+  try {
+    const authCollection = getCollection<StoredAuthorizationData>('niddau-authorizations');
+    await authCollection.insertOne(storedData);
+  } catch (error) {
+    return res.status(500).json({
+      type: 'urn:3gpp:error:internal-error',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'Failed to store authorization data',
+      cause: 'INTERNAL_ERROR'
+    } as ProblemDetails);
+  }
 
   res.status(200).json(authData);
 });

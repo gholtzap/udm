@@ -67,7 +67,7 @@ router.post('/:supiOrSuci/security-information/generate-auth-data', async (req: 
   const authRequest: AuthenticationInfoRequest = req.body;
 
   auditLog('auth_vector_generation_request', {
-    supi_or_suci: supiOrSuci,
+    identifier_type: suciPattern.test(supiOrSuci) ? 'suci' : 'supi',
     serving_network: authRequest?.servingNetworkName,
     ausf_instance: authRequest?.ausfInstanceId
   }, 'Received authentication vector generation request');
@@ -88,7 +88,7 @@ router.post('/:supiOrSuci/security-information/generate-auth-data', async (req: 
 
   if (suciPattern.test(supiOrSuci)) {
     auditLog('auth_vector_generation_failed', {
-      supi_or_suci: supiOrSuci,
+      identifier_type: 'suci',
       reason: 'suci_not_implemented'
     }, 'Auth vector generation failed: SUCI de-concealment not implemented');
     return res.status(501).json({

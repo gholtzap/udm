@@ -914,16 +914,26 @@ router.post('/:supi/gba-security-information/generate-av', async (req: Request, 
   const newSqnInt = parseInt(sequenceNumber, 16) + 1;
   const newSqn = newSqnInt.toString(16).padStart(12, '0').toUpperCase();
 
-  if (subscriber.subscribedData?.authenticationSubscription) {
-    await subscribersCollection.updateOne(
-      { supi },
-      { $set: { 'subscribedData.authenticationSubscription.sequenceNumber': newSqn } }
-    );
-  } else {
-    await subscribersCollection.updateOne(
-      { supi },
-      { $set: { sequenceNumber: newSqn } }
-    );
+  try {
+    const subscribersCollection = getCollection<SubscriberData>('subscribers');
+    if (subscriber.subscribedData?.authenticationSubscription) {
+      await subscribersCollection.updateOne(
+        { supi },
+        { $set: { 'subscribedData.authenticationSubscription.sequenceNumber': newSqn } }
+      );
+    } else {
+      await subscribersCollection.updateOne(
+        { supi },
+        { $set: { sequenceNumber: newSqn } }
+      );
+    }
+  } catch (error) {
+    return res.status(500).json({
+      type: 'urn:3gpp:error:internal-error',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'Failed to update sequence number'
+    });
   }
 
   const result: GbaAuthenticationInfoResult = {
@@ -1051,16 +1061,26 @@ router.post('/:supiOrSuci/prose-security-information/generate-av', async (req: R
   const newSqnInt = parseInt(sequenceNumber, 16) + 1;
   const newSqn = newSqnInt.toString(16).padStart(12, '0').toUpperCase();
 
-  if (subscriber.subscribedData?.authenticationSubscription) {
-    await subscribersCollection.updateOne(
-      { supi },
-      { $set: { 'subscribedData.authenticationSubscription.sequenceNumber': newSqn } }
-    );
-  } else {
-    await subscribersCollection.updateOne(
-      { supi },
-      { $set: { sequenceNumber: newSqn } }
-    );
+  try {
+    const subscribersCollection = getCollection<SubscriberData>('subscribers');
+    if (subscriber.subscribedData?.authenticationSubscription) {
+      await subscribersCollection.updateOne(
+        { supi },
+        { $set: { 'subscribedData.authenticationSubscription.sequenceNumber': newSqn } }
+      );
+    } else {
+      await subscribersCollection.updateOne(
+        { supi },
+        { $set: { sequenceNumber: newSqn } }
+      );
+    }
+  } catch (error) {
+    return res.status(500).json({
+      type: 'urn:3gpp:error:internal-error',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'Failed to update sequence number'
+    });
   }
 
   const result: ProSeAuthenticationInfoResult = {

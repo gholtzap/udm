@@ -1,7 +1,7 @@
 {
-  "name": "hss",
+  "name": "udm",
   "version": "1.0.0",
-  "description": "Hello World TypeScript API",
+  "description": "5G UDM (Unified Data Management)",
   "main": "dist/index.js",
   "scripts": {
     "dev": "ts-node src/index.ts",

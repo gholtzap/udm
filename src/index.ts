@@ -4,6 +4,8 @@ dotenv.config();
 import express, { Request, Response } from 'express';
 import { initializeMongoDB, closeConnection } from './db/mongodb';
 import { authRateLimiter } from './middleware/rate-limit';
+import { correlationIdMiddleware } from './middleware/correlation-id';
+import { requestLoggerMiddleware } from './middleware/request-logger';
 import eeRouter from './routers/nudm-ee';
 import mtRouter from './routers/nudm-mt';
 import niddauRouter from './routers/nudm-niddau';
@@ -21,6 +23,8 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json({ limit: '10mb' }));
+app.use(correlationIdMiddleware);
+app.use(requestLoggerMiddleware);
 
 app.get('/health', (req: Request, res: Response) => {
   res.json({ status: 'ok' });

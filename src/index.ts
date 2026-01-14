@@ -2,7 +2,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import express, { Request, Response } from 'express';
-import { initializeMongoDB } from './db/mongodb';
+import { initializeMongoDB, closeConnection } from './db/mongodb';
 import { authRateLimiter } from './middleware/rate-limit';
 import eeRouter from './routers/nudm-ee';
 import mtRouter from './routers/nudm-mt';
@@ -14,6 +14,7 @@ import ssauRouter from './routers/nudm-ssau';
 import ueauRouter from './routers/nudm-ueau';
 import uecmRouter from './routers/nudm-uecm';
 import ueidRouter from './routers/nudm-ueid';
+import { Server } from 'http';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -35,13 +36,44 @@ app.use('/nudm-ueau/v1', authRateLimiter, ueauRouter);
 app.use('/nudm-uecm/v1', uecmRouter);
 app.use('/nudm-ueid/v1', ueidRouter);
 
+let server: Server;
+
+const gracefulShutdown = async (signal: string) => {
+  console.log(`${signal} received, starting graceful shutdown...`);
+
+  if (server) {
+    server.close(async () => {
+      console.log('HTTP server closed');
+
+      try {
+        await closeConnection();
+        console.log('MongoDB connection closed');
+        process.exit(0);
+      } catch (error) {
+        console.error('Error closing MongoDB connection:', error);
+        process.exit(1);
+      }
+    });
+
+    setTimeout(() => {
+      console.error('Forced shutdown after timeout');
+      process.exit(1);
+    }, 30000);
+  } else {
+    process.exit(0);
+  }
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
 const startServer = async () => {
   try {
     await initializeMongoDB();
     console.log('MongoDB connected successfully');
     console.log('Rate limiting enabled for authentication endpoints (nudm-ueau)');
 
-    app.listen(PORT, () => {
+    server = app.listen(PORT, () => {
       console.log(`nUDM server is running on port ${PORT}`);
     });
   } catch (error) {

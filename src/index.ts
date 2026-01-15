@@ -6,6 +6,7 @@ import { initializeMongoDB, closeConnection, getDatabase } from './db/mongodb';
 import { authRateLimiter } from './middleware/rate-limit';
 import { correlationIdMiddleware } from './middleware/correlation-id';
 import { requestLoggerMiddleware } from './middleware/request-logger';
+import { timeoutMiddleware } from './middleware/timeout';
 import eeRouter from './routers/nudm-ee';
 import mtRouter from './routers/nudm-mt';
 import niddauRouter from './routers/nudm-niddau';
@@ -23,10 +24,11 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json({ limit: '10mb' }));
+app.use(timeoutMiddleware(30000));
 app.use(correlationIdMiddleware);
 app.use(requestLoggerMiddleware);
 
-app.get('/health', async (req: Request, res: Response) => {
+app.get('/health', async (_req: Request, res: Response) => {
   try {
     await getDatabase().admin().ping();
     res.json({ status: 'ok' });

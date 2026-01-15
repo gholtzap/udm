@@ -60,14 +60,26 @@ import {
   RangingSlPrivacyCheckRelatedAction
 } from '../types/nudm-sdm-types';
 import { validateUeIdentity, createInvalidParameterError, createMissingParameterError, createNotFoundError, PlmnId, Snssai, AccessType, PduSessionType } from '../types/common-types';
+import {
+  getSubscriptionData,
+  setSubscriptionData,
+  getAllSubscriptionData,
+  getSdmSubscription,
+  setSdmSubscription,
+  deleteSdmSubscription,
+  hasSdmSubscription,
+  deleteSdmSubscriptionsForUe,
+  getSharedData,
+  setSharedData,
+  getSharedDataSubscription,
+  setSharedDataSubscription,
+  deleteSharedDataSubscription,
+  hasSharedDataSubscription,
+  getGroupIdentifiers,
+  setGroupIdentifiers
+} from '../db/sdm-db';
 
 const router = Router();
-
-const subscriptionDataStore = new Map<string, SubscriptionDataSets>();
-const sdmSubscriptionStore = new Map<string, Map<string, SdmSubscription>>();
-const sharedDataStore = new Map<SharedDataId, SharedData>();
-const sharedDataSubscriptionStore = new Map<string, SdmSubscription>();
-const groupIdentifiersStore = new Map<string, GroupIdentifiers>();
 
 const notImplemented = (req: Request, res: Response) => {
   res.status(501).json({
@@ -77,7 +89,7 @@ const notImplemented = (req: Request, res: Response) => {
   });
 };
 
-router.get('/:supi', (req: Request, res: Response) => {
+router.get('/:supi', async (req: Request, res: Response) => {
   const { supi } = req.params;
   const datasetNames = req.query['dataset-names'] as string;
   const plmnId = req.query['plmn-id'] as string | undefined;
@@ -97,15 +109,15 @@ router.get('/:supi', (req: Request, res: Response) => {
   }
 
   const requestedDatasets = datasetNames.split(',').map(ds => ds.trim() as DataSetName);
-  
+
   for (const dataset of requestedDatasets) {
     if (!Object.values(DataSetName).includes(dataset)) {
       return res.status(400).json(createInvalidParameterError(`Invalid dataset name: ${dataset}`));
     }
   }
 
-  let storedData = subscriptionDataStore.get(supi);
-  
+  let storedData = await getSubscriptionData(supi);
+
   if (!storedData) {
     storedData = {
       amData: {
@@ -141,7 +153,7 @@ router.get('/:supi', (req: Request, res: Response) => {
         smsSubscribed: true
       }
     };
-    subscriptionDataStore.set(supi, storedData);
+    await setSubscriptionData(supi, storedData);
   }
 
   const response: SubscriptionDataSets = {};
@@ -202,7 +214,7 @@ router.get('/:supi', (req: Request, res: Response) => {
   return res.status(200).json(response);
 });
 
-router.get('/:supi/nssai', (req: Request, res: Response) => {
+router.get('/:supi/nssai', async (req: Request, res: Response) => {
   const { supi } = req.params;
   const supportedFeatures = req.query['supported-features'] as string | undefined;
   const plmnId = req.query['plmn-id'] as string | undefined;
@@ -212,8 +224,8 @@ router.get('/:supi/nssai', (req: Request, res: Response) => {
     return res.status(400).json(createInvalidParameterError('Invalid supi format'));
   }
 
-  let storedData = subscriptionDataStore.get(supi);
-  
+  let storedData = await getSubscriptionData(supi);
+
   if (!storedData) {
     storedData = {
       amData: {
@@ -249,7 +261,7 @@ router.get('/:supi/nssai', (req: Request, res: Response) => {
         smsSubscribed: true
       }
     };
-    subscriptionDataStore.set(supi, storedData);
+    await setSubscriptionData(supi, storedData);
   }
 
   if (!storedData.amData?.nssai) {
@@ -271,7 +283,7 @@ router.get('/:supi/nssai', (req: Request, res: Response) => {
   return res.status(200).json(response);
 });
 
-router.get('/:supi/ue-context-in-amf-data', (req: Request, res: Response) => {
+router.get('/:supi/ue-context-in-amf-data', async (req: Request, res: Response) => {
   const { supi } = req.params;
   const supportedFeatures = req.query['supported-features'] as string | undefined;
 
@@ -279,8 +291,8 @@ router.get('/:supi/ue-context-in-amf-data', (req: Request, res: Response) => {
     return res.status(400).json(createInvalidParameterError('Invalid supi format'));
   }
 
-  let storedData = subscriptionDataStore.get(supi);
-  
+  let storedData = await getSubscriptionData(supi);
+
   if (!storedData) {
     storedData = {
       amData: {
@@ -316,7 +328,7 @@ router.get('/:supi/ue-context-in-amf-data', (req: Request, res: Response) => {
         smsSubscribed: true
       }
     };
-    subscriptionDataStore.set(supi, storedData);
+    await setSubscriptionData(supi, storedData);
   }
 
   if (!storedData.uecAmfData) {
@@ -335,7 +347,7 @@ router.get('/:supi/ue-context-in-amf-data', (req: Request, res: Response) => {
         }
       ]
     };
-    subscriptionDataStore.set(supi, storedData);
+    await setSubscriptionData(supi, storedData);
   }
 
   const response: UeContextInAmfData = {
@@ -345,7 +357,7 @@ router.get('/:supi/ue-context-in-amf-data', (req: Request, res: Response) => {
   return res.status(200).json(response);
 });
 
-router.get('/:supi/am-data', (req: Request, res: Response) => {
+router.get('/:supi/am-data', async (req: Request, res: Response) => {
   const { supi } = req.params;
   const supportedFeatures = req.query['supported-features'] as string | undefined;
   const plmnIdParam = req.query['plmn-id'] as string | undefined;
@@ -383,7 +395,7 @@ router.get('/:supi/am-data', (req: Request, res: Response) => {
     }
   }
 
-  let storedData = subscriptionDataStore.get(supi);
+  let storedData = await getSubscriptionData(supi);
   
   if (!storedData) {
     storedData = {
@@ -420,7 +432,7 @@ router.get('/:supi/am-data', (req: Request, res: Response) => {
         smsSubscribed: true
       }
     };
-    subscriptionDataStore.set(supi, storedData);
+    await setSubscriptionData(supi, storedData);
   }
 
   if (!storedData.amData) {
@@ -449,7 +461,7 @@ router.get('/:supi/am-data', (req: Request, res: Response) => {
   return res.status(200).json(response);
 });
 
-router.get('/:supi/am-data/ecr-data', (req: Request, res: Response) => {
+router.get('/:supi/am-data/ecr-data', async (req: Request, res: Response) => {
   const { supi } = req.params;
   const supportedFeatures = req.query['supported-features'] as string | undefined;
   const ifNoneMatch = req.headers['if-none-match'] as string | undefined;
@@ -459,7 +471,7 @@ router.get('/:supi/am-data/ecr-data', (req: Request, res: Response) => {
     return res.status(400).json(createInvalidParameterError('Invalid supi format'));
   }
 
-  let storedData = subscriptionDataStore.get(supi);
+  let storedData = await getSubscriptionData(supi);
   
   if (!storedData) {
     storedData = {
@@ -496,7 +508,7 @@ router.get('/:supi/am-data/ecr-data', (req: Request, res: Response) => {
         smsSubscribed: true
       }
     };
-    subscriptionDataStore.set(supi, storedData);
+    await setSubscriptionData(supi, storedData);
   }
 
   const response: EnhancedCoverageRestrictionData = {
@@ -513,7 +525,7 @@ router.get('/:supi/am-data/ecr-data', (req: Request, res: Response) => {
   return res.status(200).json(response);
 });
 
-router.get('/:supi/smf-select-data', (req: Request, res: Response) => {
+router.get('/:supi/smf-select-data', async (req: Request, res: Response) => {
   const { supi } = req.params;
   const supportedFeatures = req.query['supported-features'] as string | undefined;
   const plmnIdParam = req.query['plmn-id'] as string | undefined;
@@ -537,7 +549,7 @@ router.get('/:supi/smf-select-data', (req: Request, res: Response) => {
     }
   }
 
-  let storedData = subscriptionDataStore.get(supi);
+  let storedData = await getSubscriptionData(supi);
   
   if (!storedData) {
     storedData = {
@@ -574,7 +586,7 @@ router.get('/:supi/smf-select-data', (req: Request, res: Response) => {
         smsSubscribed: true
       }
     };
-    subscriptionDataStore.set(supi, storedData);
+    await setSubscriptionData(supi, storedData);
   }
 
   if (!storedData.smfSelData) {
@@ -603,7 +615,7 @@ router.get('/:supi/smf-select-data', (req: Request, res: Response) => {
   return res.status(200).json(response);
 });
 
-router.get('/:supi/ue-context-in-smf-data', (req: Request, res: Response) => {
+router.get('/:supi/ue-context-in-smf-data', async (req: Request, res: Response) => {
   const { supi } = req.params;
   const supportedFeatures = req.query['supported-features'] as string | undefined;
   const plmnIdParam = req.query['plmn-id'] as string | undefined;
@@ -624,7 +636,7 @@ router.get('/:supi/ue-context-in-smf-data', (req: Request, res: Response) => {
     }
   }
 
-  let storedData = subscriptionDataStore.get(supi);
+  let storedData = await getSubscriptionData(supi);
   
   if (!storedData) {
     storedData = {
@@ -661,7 +673,7 @@ router.get('/:supi/ue-context-in-smf-data', (req: Request, res: Response) => {
         smsSubscribed: true
       }
     };
-    subscriptionDataStore.set(supi, storedData);
+    await setSubscriptionData(supi, storedData);
   }
 
   if (!storedData.uecSmfData) {
@@ -687,7 +699,7 @@ router.get('/:supi/ue-context-in-smf-data', (req: Request, res: Response) => {
         }
       ]
     };
-    subscriptionDataStore.set(supi, storedData);
+    await setSubscriptionData(supi, storedData);
   }
 
   const response: UeContextInSmfData = {
@@ -697,7 +709,7 @@ router.get('/:supi/ue-context-in-smf-data', (req: Request, res: Response) => {
   return res.status(200).json(response);
 });
 
-router.get('/:supi/ue-context-in-smsf-data', (req: Request, res: Response) => {
+router.get('/:supi/ue-context-in-smsf-data', async (req: Request, res: Response) => {
   const { supi } = req.params;
   const supportedFeatures = req.query['supported-features'] as string | undefined;
 
@@ -705,7 +717,7 @@ router.get('/:supi/ue-context-in-smsf-data', (req: Request, res: Response) => {
     return res.status(400).json(createInvalidParameterError('Invalid supi format'));
   }
 
-  let storedData = subscriptionDataStore.get(supi);
+  let storedData = await getSubscriptionData(supi);
   
   if (!storedData) {
     storedData = {
@@ -742,7 +754,7 @@ router.get('/:supi/ue-context-in-smsf-data', (req: Request, res: Response) => {
         smsSubscribed: true
       }
     };
-    subscriptionDataStore.set(supi, storedData);
+    await setSubscriptionData(supi, storedData);
   }
 
   if (!storedData.uecSmsfData) {
@@ -763,7 +775,7 @@ router.get('/:supi/ue-context-in-smsf-data', (req: Request, res: Response) => {
         }
       }
     };
-    subscriptionDataStore.set(supi, storedData);
+    await setSubscriptionData(supi, storedData);
   }
 
   const response: UeContextInSmsfData = {
@@ -773,7 +785,7 @@ router.get('/:supi/ue-context-in-smsf-data', (req: Request, res: Response) => {
   return res.status(200).json(response);
 });
 
-router.get('/:supi/trace-data', (req: Request, res: Response) => {
+router.get('/:supi/trace-data', async (req: Request, res: Response) => {
   const { supi } = req.params;
   const supportedFeatures = req.query['supported-features'] as string | undefined;
   const plmnIdParam = req.query['plmn-id'] as string | undefined;
@@ -796,7 +808,7 @@ router.get('/:supi/trace-data', (req: Request, res: Response) => {
     }
   }
 
-  let storedData = subscriptionDataStore.get(supi);
+  let storedData = await getSubscriptionData(supi);
   
   if (!storedData) {
     storedData = {
@@ -833,7 +845,7 @@ router.get('/:supi/trace-data', (req: Request, res: Response) => {
         smsSubscribed: true
       }
     };
-    subscriptionDataStore.set(supi, storedData);
+    await setSubscriptionData(supi, storedData);
   }
 
   if (!storedData.traceData) {
@@ -847,7 +859,7 @@ router.get('/:supi/trace-data', (req: Request, res: Response) => {
       collectionEntityIpv4Addr: '192.168.100.10',
       interfaceList: 'N1,N2,N4'
     };
-    subscriptionDataStore.set(supi, storedData);
+    await setSubscriptionData(supi, storedData);
   }
 
   const response: TraceDataResponse = {
@@ -864,7 +876,7 @@ router.get('/:supi/trace-data', (req: Request, res: Response) => {
   return res.status(200).json(response);
 });
 
-router.get('/:supi/sm-data', (req: Request, res: Response) => {
+router.get('/:supi/sm-data', async (req: Request, res: Response) => {
   const { supi } = req.params;
   const supportedFeatures = req.query['supported-features'] as string | undefined;
   const singleNssaiParam = req.query['single-nssai'] as string | undefined;
@@ -902,7 +914,7 @@ router.get('/:supi/sm-data', (req: Request, res: Response) => {
     }
   }
 
-  let storedData = subscriptionDataStore.get(supi);
+  let storedData = await getSubscriptionData(supi);
   
   if (!storedData) {
     storedData = {
@@ -939,7 +951,7 @@ router.get('/:supi/sm-data', (req: Request, res: Response) => {
         smsSubscribed: true
       }
     };
-    subscriptionDataStore.set(supi, storedData);
+    await setSubscriptionData(supi, storedData);
   }
 
   if (!storedData.smData) {
@@ -997,7 +1009,7 @@ router.get('/:supi/sm-data', (req: Request, res: Response) => {
     };
 
     storedData.smData = [sessionManagementData];
-    subscriptionDataStore.set(supi, storedData);
+    await setSubscriptionData(supi, storedData);
   }
 
   let response: SmSubsData;
@@ -1060,7 +1072,7 @@ router.get('/:supi/sm-data', (req: Request, res: Response) => {
   return res.status(200).json(response);
 });
 
-router.get('/:supi/sms-data', (req: Request, res: Response) => {
+router.get('/:supi/sms-data', async (req: Request, res: Response) => {
   const { supi } = req.params;
   const supportedFeatures = req.query['supported-features'] as string | undefined;
   const plmnIdParam = req.query['plmn-id'] as string | undefined;
@@ -1083,7 +1095,7 @@ router.get('/:supi/sms-data', (req: Request, res: Response) => {
     }
   }
 
-  let storedData = subscriptionDataStore.get(supi);
+  let storedData = await getSubscriptionData(supi);
   
   if (!storedData) {
     storedData = {
@@ -1120,7 +1132,7 @@ router.get('/:supi/sms-data', (req: Request, res: Response) => {
         smsSubscribed: true
       }
     };
-    subscriptionDataStore.set(supi, storedData);
+    await setSubscriptionData(supi, storedData);
   }
 
   if (!storedData.smsSubsData) {
@@ -1149,7 +1161,7 @@ router.get('/:supi/sms-data', (req: Request, res: Response) => {
   return res.status(200).json(response);
 });
 
-router.get('/:supi/sms-mng-data', (req: Request, res: Response) => {
+router.get('/:supi/sms-mng-data', async (req: Request, res: Response) => {
   const { supi } = req.params;
   const supportedFeatures = req.query['supported-features'] as string | undefined;
   const plmnIdParam = req.query['plmn-id'] as string | undefined;
@@ -1172,7 +1184,7 @@ router.get('/:supi/sms-mng-data', (req: Request, res: Response) => {
     }
   }
 
-  let storedData = subscriptionDataStore.get(supi);
+  let storedData = await getSubscriptionData(supi);
   
   if (!storedData) {
     storedData = {
@@ -1209,7 +1221,7 @@ router.get('/:supi/sms-mng-data', (req: Request, res: Response) => {
         smsSubscribed: true
       }
     };
-    subscriptionDataStore.set(supi, storedData);
+    await setSubscriptionData(supi, storedData);
   }
 
   if (!storedData.smsMngData) {
@@ -1221,7 +1233,7 @@ router.get('/:supi/sms-mng-data', (req: Request, res: Response) => {
       moSmsBarringAll: false,
       moSmsBarringRoaming: false
     };
-    subscriptionDataStore.set(supi, storedData);
+    await setSubscriptionData(supi, storedData);
   }
 
   const response: SmsManagementSubscriptionData = {
@@ -1242,7 +1254,7 @@ router.get('/:supi/sms-mng-data', (req: Request, res: Response) => {
   return res.status(200).json(response);
 });
 
-router.get('/:ueId/lcs-privacy-data', (req: Request, res: Response) => {
+router.get('/:ueId/lcs-privacy-data', async (req: Request, res: Response) => {
   const { ueId } = req.params;
   const supportedFeatures = req.query['supported-features'] as string | undefined;
   const ifNoneMatch = req.headers['if-none-match'] as string | undefined;
@@ -1252,7 +1264,7 @@ router.get('/:ueId/lcs-privacy-data', (req: Request, res: Response) => {
     return res.status(400).json(createInvalidParameterError('Invalid ueId format'));
   }
 
-  let storedData = subscriptionDataStore.get(ueId);
+  let storedData = await getSubscriptionData(ueId);
   
   if (!storedData) {
     storedData = {
@@ -1289,7 +1301,7 @@ router.get('/:ueId/lcs-privacy-data', (req: Request, res: Response) => {
         smsSubscribed: true
       }
     };
-    subscriptionDataStore.set(ueId, storedData);
+    await setSubscriptionData(ueId, storedData);
   }
 
   if (!storedData.lcsPrivacyData) {
@@ -1317,7 +1329,7 @@ router.get('/:ueId/lcs-privacy-data', (req: Request, res: Response) => {
         }
       ]
     };
-    subscriptionDataStore.set(ueId, storedData);
+    await setSubscriptionData(ueId, storedData);
   }
 
   const response: LcsPrivacyData = {
@@ -1334,7 +1346,7 @@ router.get('/:ueId/lcs-privacy-data', (req: Request, res: Response) => {
   return res.status(200).json(response);
 });
 
-router.get('/:supi/lcs-mo-data', (req: Request, res: Response) => {
+router.get('/:supi/lcs-mo-data', async (req: Request, res: Response) => {
   const { supi } = req.params;
   const supportedFeatures = req.query['supported-features'] as string | undefined;
   const ifNoneMatch = req.headers['if-none-match'] as string | undefined;
@@ -1344,7 +1356,7 @@ router.get('/:supi/lcs-mo-data', (req: Request, res: Response) => {
     return res.status(400).json(createInvalidParameterError('Invalid supi format'));
   }
 
-  let storedData = subscriptionDataStore.get(supi);
+  let storedData = await getSubscriptionData(supi);
   
   if (!storedData) {
     storedData = {
@@ -1381,7 +1393,7 @@ router.get('/:supi/lcs-mo-data', (req: Request, res: Response) => {
         smsSubscribed: true
       }
     };
-    subscriptionDataStore.set(supi, storedData);
+    await setSubscriptionData(supi, storedData);
   }
 
   if (!storedData.lcsMoData) {
@@ -1394,7 +1406,7 @@ router.get('/:supi/lcs-mo-data', (req: Request, res: Response) => {
         locationAssistanceType: 'A-GPS,A-GNSS'
       }
     };
-    subscriptionDataStore.set(supi, storedData);
+    await setSubscriptionData(supi, storedData);
   }
 
   const response: LcsMoData = {
@@ -1411,7 +1423,7 @@ router.get('/:supi/lcs-mo-data', (req: Request, res: Response) => {
   return res.status(200).json(response);
 });
 
-router.get('/:supi/lcs-bca-data', (req: Request, res: Response) => {
+router.get('/:supi/lcs-bca-data', async (req: Request, res: Response) => {
   const { supi } = req.params;
   const supportedFeatures = req.query['supported-features'] as string | undefined;
   const plmnId = req.query['plmn-id'] as string | undefined;
@@ -1422,7 +1434,7 @@ router.get('/:supi/lcs-bca-data', (req: Request, res: Response) => {
     return res.status(400).json(createInvalidParameterError('Invalid supi format'));
   }
 
-  let storedData = subscriptionDataStore.get(supi);
+  let storedData = await getSubscriptionData(supi);
   
   if (!storedData) {
     storedData = {
@@ -1459,14 +1471,14 @@ router.get('/:supi/lcs-bca-data', (req: Request, res: Response) => {
         smsSubscribed: true
       }
     };
-    subscriptionDataStore.set(supi, storedData);
+    await setSubscriptionData(supi, storedData);
   }
 
   if (!storedData.lcsBroadcastAssistanceTypesData) {
     storedData.lcsBroadcastAssistanceTypesData = {
       locationAssistanceType: 'A-GPS,A-GNSS,OTDOA,ECID'
     };
-    subscriptionDataStore.set(supi, storedData);
+    await setSubscriptionData(supi, storedData);
   }
 
   const response: LcsBroadcastAssistanceTypesData = {
@@ -1483,7 +1495,7 @@ router.get('/:supi/lcs-bca-data', (req: Request, res: Response) => {
   return res.status(200).json(response);
 });
 
-router.get('/:supi/lcs-subscription-data', (req: Request, res: Response) => {
+router.get('/:supi/lcs-subscription-data', async (req: Request, res: Response) => {
   const { supi } = req.params;
   const supportedFeatures = req.query['supported-features'] as string | undefined;
   const ifNoneMatch = req.headers['if-none-match'] as string | undefined;
@@ -1493,7 +1505,7 @@ router.get('/:supi/lcs-subscription-data', (req: Request, res: Response) => {
     return res.status(400).json(createInvalidParameterError('Invalid supi format'));
   }
 
-  let storedData = subscriptionDataStore.get(supi);
+  let storedData = await getSubscriptionData(supi);
   
   if (!storedData) {
     storedData = {
@@ -1530,7 +1542,7 @@ router.get('/:supi/lcs-subscription-data', (req: Request, res: Response) => {
         smsSubscribed: true
       }
     };
-    subscriptionDataStore.set(supi, storedData);
+    await setSubscriptionData(supi, storedData);
   }
 
   if (!storedData.lcsSubscriptionData) {
@@ -1540,7 +1552,7 @@ router.get('/:supi/lcs-subscription-data', (req: Request, res: Response) => {
       lpHapType: 'standard',
       userPlanePosIndLmf: false
     };
-    subscriptionDataStore.set(supi, storedData);
+    await setSubscriptionData(supi, storedData);
   }
 
   const response: LcsSubscriptionData = {
@@ -1557,7 +1569,7 @@ router.get('/:supi/lcs-subscription-data', (req: Request, res: Response) => {
   return res.status(200).json(response);
 });
 
-router.get('/:supi/v2x-data', (req: Request, res: Response) => {
+router.get('/:supi/v2x-data', async (req: Request, res: Response) => {
   const { supi } = req.params;
   const supportedFeatures = req.query['supported-features'] as string | undefined;
   const ifNoneMatch = req.headers['if-none-match'] as string | undefined;
@@ -1567,7 +1579,7 @@ router.get('/:supi/v2x-data', (req: Request, res: Response) => {
     return res.status(400).json(createInvalidParameterError('Invalid supi format'));
   }
 
-  let storedData = subscriptionDataStore.get(supi);
+  let storedData = await getSubscriptionData(supi);
   
   if (!storedData) {
     storedData = {
@@ -1604,7 +1616,7 @@ router.get('/:supi/v2x-data', (req: Request, res: Response) => {
         smsSubscribed: true
       }
     };
-    subscriptionDataStore.set(supi, storedData);
+    await setSubscriptionData(supi, storedData);
   }
 
   if (!storedData.v2xData) {
@@ -1628,7 +1640,7 @@ router.get('/:supi/v2x-data', (req: Request, res: Response) => {
       nrUePc5Ambr: '100 Mbps',
       ltePc5Ambr: '50 Mbps'
     };
-    subscriptionDataStore.set(supi, storedData);
+    await setSubscriptionData(supi, storedData);
   }
 
   const response: V2xSubscriptionData = {
@@ -1645,7 +1657,7 @@ router.get('/:supi/v2x-data', (req: Request, res: Response) => {
   return res.status(200).json(response);
 });
 
-router.get('/:supi/prose-data', (req: Request, res: Response) => {
+router.get('/:supi/prose-data', async (req: Request, res: Response) => {
   const { supi } = req.params;
   const supportedFeatures = req.query['supported-features'] as string | undefined;
   const ifNoneMatch = req.headers['if-none-match'] as string | undefined;
@@ -1655,7 +1667,7 @@ router.get('/:supi/prose-data', (req: Request, res: Response) => {
     return res.status(400).json(createInvalidParameterError('Invalid supi format'));
   }
 
-  let storedData = subscriptionDataStore.get(supi);
+  let storedData = await getSubscriptionData(supi);
   
   if (!storedData) {
     storedData = {
@@ -1692,7 +1704,7 @@ router.get('/:supi/prose-data', (req: Request, res: Response) => {
         smsSubscribed: true
       }
     };
-    subscriptionDataStore.set(supi, storedData);
+    await setSubscriptionData(supi, storedData);
   }
 
   if (!storedData.proseData) {
@@ -1714,7 +1726,7 @@ router.get('/:supi/prose-data', (req: Request, res: Response) => {
         }
       ]
     };
-    subscriptionDataStore.set(supi, storedData);
+    await setSubscriptionData(supi, storedData);
   }
 
   const response: ProseSubscriptionData = {
@@ -1731,7 +1743,7 @@ router.get('/:supi/prose-data', (req: Request, res: Response) => {
   return res.status(200).json(response);
 });
 
-router.get('/:supi/5mbs-data', (req: Request, res: Response) => {
+router.get('/:supi/5mbs-data', async (req: Request, res: Response) => {
   const { supi } = req.params;
   const supportedFeatures = req.query['supported-features'] as string | undefined;
   const ifNoneMatch = req.headers['if-none-match'] as string | undefined;
@@ -1741,7 +1753,7 @@ router.get('/:supi/5mbs-data', (req: Request, res: Response) => {
     return res.status(400).json(createInvalidParameterError('Invalid supi format'));
   }
 
-  let storedData = subscriptionDataStore.get(supi);
+  let storedData = await getSubscriptionData(supi);
   
   if (!storedData) {
     storedData = {
@@ -1778,7 +1790,7 @@ router.get('/:supi/5mbs-data', (req: Request, res: Response) => {
         smsSubscribed: true
       }
     };
-    subscriptionDataStore.set(supi, storedData);
+    await setSubscriptionData(supi, storedData);
   }
 
   if (!storedData.mbsData) {
@@ -1789,7 +1801,7 @@ router.get('/:supi/5mbs-data', (req: Request, res: Response) => {
         `mbs-session-${supi.slice(-8)}-002`
       ]
     };
-    subscriptionDataStore.set(supi, storedData);
+    await setSubscriptionData(supi, storedData);
   }
 
   const response: MbsSubscriptionData = {
@@ -1806,7 +1818,7 @@ router.get('/:supi/5mbs-data', (req: Request, res: Response) => {
   return res.status(200).json(response);
 });
 
-router.get('/:supi/uc-data', (req: Request, res: Response) => {
+router.get('/:supi/uc-data', async (req: Request, res: Response) => {
   const { supi } = req.params;
   const supportedFeatures = req.query['supported-features'] as string | undefined;
   const ucPurposeParam = req.query['uc-purpose'] as string | undefined;
@@ -1821,7 +1833,7 @@ router.get('/:supi/uc-data', (req: Request, res: Response) => {
     return res.status(400).json(createInvalidParameterError('Invalid uc-purpose value'));
   }
 
-  let storedData = subscriptionDataStore.get(supi);
+  let storedData = await getSubscriptionData(supi);
   
   if (!storedData) {
     storedData = {
@@ -1858,7 +1870,7 @@ router.get('/:supi/uc-data', (req: Request, res: Response) => {
         smsSubscribed: true
       }
     };
-    subscriptionDataStore.set(supi, storedData);
+    await setSubscriptionData(supi, storedData);
   }
 
   if (!storedData.ucData) {
@@ -1888,7 +1900,7 @@ router.get('/:supi/uc-data', (req: Request, res: Response) => {
   res.status(200).json(response);
 });
 
-router.post('/:ueId/sdm-subscriptions', (req: Request, res: Response) => {
+router.post('/:ueId/sdm-subscriptions', async (req: Request, res: Response) => {
   const { ueId } = req.params;
   const sharedDataIds = req.query['shared-data-ids'] as string | undefined;
 
@@ -1917,28 +1929,23 @@ router.post('/:ueId/sdm-subscriptions', (req: Request, res: Response) => {
     subscriptionId
   };
 
-  let ueSubscriptions = sdmSubscriptionStore.get(ueId);
-  if (!ueSubscriptions) {
-    ueSubscriptions = new Map<string, SdmSubscription>();
-    sdmSubscriptionStore.set(ueId, ueSubscriptions);
-  }
-  ueSubscriptions.set(subscriptionId, subscription);
+  await setSdmSubscription(ueId, subscriptionId, subscription);
 
   const locationUri = `/nudm-sdm/v2/${ueId}/sdm-subscriptions/${subscriptionId}`;
 
   res.status(201).header('Location', locationUri).json(subscription);
 });
 
-router.delete('/:ueId/sdm-subscriptions/:subscriptionId', (req: Request, res: Response) => {
+router.delete('/:ueId/sdm-subscriptions/:subscriptionId', async (req: Request, res: Response) => {
   const { ueId, subscriptionId } = req.params;
 
   if (!validateUeIdentity(ueId, undefined, true)) {
     return res.status(400).json(createInvalidParameterError('Invalid ueId format'));
   }
 
-  const ueSubscriptions = sdmSubscriptionStore.get(ueId);
-  
-  if (!ueSubscriptions || !ueSubscriptions.has(subscriptionId)) {
+  const hasSubscription = await hasSdmSubscription(ueId, subscriptionId);
+
+  if (!hasSubscription) {
     return res.status(404).json({
       title: 'Not Found',
       status: 404,
@@ -1946,16 +1953,12 @@ router.delete('/:ueId/sdm-subscriptions/:subscriptionId', (req: Request, res: Re
     });
   }
 
-  ueSubscriptions.delete(subscriptionId);
-
-  if (ueSubscriptions.size === 0) {
-    sdmSubscriptionStore.delete(ueId);
-  }
+  await deleteSdmSubscription(ueId, subscriptionId);
 
   res.status(204).send();
 });
 
-router.patch('/:ueId/sdm-subscriptions/:subscriptionId', (req: Request, res: Response) => {
+router.patch('/:ueId/sdm-subscriptions/:subscriptionId', async (req: Request, res: Response) => {
   const { ueId, subscriptionId } = req.params;
   const supportedFeatures = req.query['supported-features'] as string | undefined;
 
@@ -1963,9 +1966,9 @@ router.patch('/:ueId/sdm-subscriptions/:subscriptionId', (req: Request, res: Res
     return res.status(400).json(createInvalidParameterError('Invalid ueId format'));
   }
 
-  const ueSubscriptions = sdmSubscriptionStore.get(ueId);
-  
-  if (!ueSubscriptions || !ueSubscriptions.has(subscriptionId)) {
+  const currentSubscription = await getSdmSubscription(ueId, subscriptionId);
+
+  if (!currentSubscription) {
     return res.status(404).json({
       title: 'Not Found',
       status: 404,
@@ -1975,8 +1978,6 @@ router.patch('/:ueId/sdm-subscriptions/:subscriptionId', (req: Request, res: Res
   }
 
   const modification = req.body as SdmSubsModification;
-
-  const currentSubscription = ueSubscriptions.get(subscriptionId)!;
 
   if (modification.expires !== undefined) {
     currentSubscription.expires = modification.expires;
@@ -1994,7 +1995,7 @@ router.patch('/:ueId/sdm-subscriptions/:subscriptionId', (req: Request, res: Res
     currentSubscription.monitoredResourceUris = modification.monitoredResourceUris;
   }
 
-  ueSubscriptions.set(subscriptionId, currentSubscription);
+  await setSdmSubscription(ueId, subscriptionId, currentSubscription);
 
   if (supportedFeatures) {
     currentSubscription.supportedFeatures = supportedFeatures;
@@ -2003,7 +2004,7 @@ router.patch('/:ueId/sdm-subscriptions/:subscriptionId', (req: Request, res: Res
   res.status(200).json(currentSubscription);
 });
 
-router.get('/:ueId/id-translation-result', (req: Request, res: Response) => {
+router.get('/:ueId/id-translation-result', async (req: Request, res: Response) => {
   const { ueId } = req.params;
   const supportedFeatures = req.query['supported-features'] as string | undefined;
   const afId = req.query['af-id'] as string | undefined;
@@ -2048,7 +2049,7 @@ router.get('/:ueId/id-translation-result', (req: Request, res: Response) => {
   if (isSupi) {
     const supi = ueId;
     
-    let storedData = subscriptionDataStore.get(supi);
+    let storedData = await getSubscriptionData(supi);
     
     if (!storedData) {
       storedData = {
@@ -2085,7 +2086,7 @@ router.get('/:ueId/id-translation-result', (req: Request, res: Response) => {
           smsSubscribed: true
         }
       };
-      subscriptionDataStore.set(supi, storedData);
+      await setSubscriptionData(supi, storedData);
     }
 
     const gpsis = storedData.amData?.gpsis || [];
@@ -2115,7 +2116,8 @@ router.get('/:ueId/id-translation-result', (req: Request, res: Response) => {
     
     let foundSupi: string | undefined;
     
-    for (const [supi, data] of subscriptionDataStore.entries()) {
+    const map = await getAllSubscriptionData();
+    for (const [supi, data] of map.entries()) {
       if (data.amData?.gpsis?.includes(gpsi)) {
         foundSupi = supi;
         break;
@@ -2159,11 +2161,11 @@ router.get('/:ueId/id-translation-result', (req: Request, res: Response) => {
           smsSubscribed: true
         }
       };
-      subscriptionDataStore.set(foundSupi, storedData);
+      await setSubscriptionData(foundSupi, storedData);
     }
 
-    const storedData = subscriptionDataStore.get(foundSupi)!;
-    const allGpsis = storedData.amData?.gpsis || [];
+    const storedData = await getSubscriptionData(foundSupi);
+    const allGpsis = storedData?.amData?.gpsis || [];
     const otherGpsis = allGpsis.filter(g => g !== gpsi);
 
     result = {
@@ -2187,7 +2189,7 @@ router.get('/:ueId/id-translation-result', (req: Request, res: Response) => {
   return res.status(200).json(result);
 });
 
-router.put('/:supi/am-data/sor-ack', (req: Request, res: Response) => {
+router.put('/:supi/am-data/sor-ack', async (req: Request, res: Response) => {
   const { supi } = req.params;
 
   if (!validateUeIdentity(supi, ['imsi', 'nai'])) {
@@ -2200,7 +2202,7 @@ router.put('/:supi/am-data/sor-ack', (req: Request, res: Response) => {
     return res.status(400).json(createMissingParameterError('provisioningTime is required'));
   }
 
-  const storedData = subscriptionDataStore.get(supi);
+  const storedData = await getSubscriptionData(supi);
   
   if (!storedData) {
     return res.status(404).json({
@@ -2214,7 +2216,7 @@ router.put('/:supi/am-data/sor-ack', (req: Request, res: Response) => {
   return res.status(204).send();
 });
 
-router.put('/:supi/am-data/upu-ack', (req: Request, res: Response) => {
+router.put('/:supi/am-data/upu-ack', async (req: Request, res: Response) => {
   const { supi } = req.params;
 
   if (!validateUeIdentity(supi, ['imsi', 'nai'])) {
@@ -2227,7 +2229,7 @@ router.put('/:supi/am-data/upu-ack', (req: Request, res: Response) => {
     return res.status(400).json(createMissingParameterError('provisioningTime is required'));
   }
 
-  const storedData = subscriptionDataStore.get(supi);
+  const storedData = await getSubscriptionData(supi);
   
   if (!storedData) {
     return res.status(404).json({
@@ -2241,7 +2243,7 @@ router.put('/:supi/am-data/upu-ack', (req: Request, res: Response) => {
   return res.status(204).send();
 });
 
-router.put('/:supi/am-data/subscribed-snssais-ack', (req: Request, res: Response) => {
+router.put('/:supi/am-data/subscribed-snssais-ack', async (req: Request, res: Response) => {
   const { supi } = req.params;
 
   if (!validateUeIdentity(supi, ['imsi', 'nai'])) {
@@ -2254,7 +2256,7 @@ router.put('/:supi/am-data/subscribed-snssais-ack', (req: Request, res: Response
     return res.status(400).json(createMissingParameterError('provisioningTime is required'));
   }
 
-  const storedData = subscriptionDataStore.get(supi);
+  const storedData = await getSubscriptionData(supi);
   
   if (!storedData) {
     return res.status(404).json({
@@ -2268,7 +2270,7 @@ router.put('/:supi/am-data/subscribed-snssais-ack', (req: Request, res: Response
   return res.status(204).send();
 });
 
-router.put('/:supi/am-data/cag-ack', (req: Request, res: Response) => {
+router.put('/:supi/am-data/cag-ack', async (req: Request, res: Response) => {
   const { supi } = req.params;
 
   if (!validateUeIdentity(supi, ['imsi', 'nai'])) {
@@ -2281,7 +2283,7 @@ router.put('/:supi/am-data/cag-ack', (req: Request, res: Response) => {
     return res.status(400).json(createMissingParameterError('provisioningTime is required'));
   }
 
-  const storedData = subscriptionDataStore.get(supi);
+  const storedData = await getSubscriptionData(supi);
   
   if (!storedData) {
     return res.status(404).json({
@@ -2295,7 +2297,7 @@ router.put('/:supi/am-data/cag-ack', (req: Request, res: Response) => {
   return res.status(204).send();
 });
 
-router.post('/:supi/am-data/update-sor', (req: Request, res: Response) => {
+router.post('/:supi/am-data/update-sor', async (req: Request, res: Response) => {
   const { supi } = req.params;
 
   if (!validateUeIdentity(supi, ['imsi', 'nai'])) {
@@ -2312,7 +2314,7 @@ router.post('/:supi/am-data/update-sor', (req: Request, res: Response) => {
     return res.status(400).json(createInvalidParameterError('vplmnId must contain mcc and mnc'));
   }
 
-  const storedData = subscriptionDataStore.get(supi);
+  const storedData = await getSubscriptionData(supi);
   
   if (!storedData || !storedData.amData) {
     return res.status(404).json({
@@ -2336,7 +2338,7 @@ router.post('/:supi/am-data/update-sor', (req: Request, res: Response) => {
   return res.status(200).json(storedData.amData.sorInfo);
 });
 
-router.get('/shared-data', (req: Request, res: Response) => {
+router.get('/shared-data', async (req: Request, res: Response) => {
   const sharedDataIdsParam = req.query['shared-data-ids'] as string | undefined;
   const supportedFeatures = req.query['supported-features'] as string | undefined;
   const ifNoneMatch = req.headers['if-none-match'] as string | undefined;
@@ -2355,7 +2357,7 @@ router.get('/shared-data', (req: Request, res: Response) => {
   const result: SharedData[] = [];
 
   for (const sharedDataId of sharedDataIds) {
-    const sharedData = sharedDataStore.get(sharedDataId);
+    const sharedData = await getSharedData(sharedDataId);
     if (sharedData) {
       result.push(sharedData);
     }
@@ -2380,7 +2382,7 @@ router.get('/shared-data', (req: Request, res: Response) => {
   return res.status(200).json(result);
 });
 
-router.post('/shared-data-subscriptions', (req: Request, res: Response) => {
+router.post('/shared-data-subscriptions', async (req: Request, res: Response) => {
   const subscriptionRequest = req.body as SdmSubscription;
 
   if (!subscriptionRequest.nfInstanceId) {
@@ -2402,17 +2404,19 @@ router.post('/shared-data-subscriptions', (req: Request, res: Response) => {
     subscriptionId
   };
 
-  sharedDataSubscriptionStore.set(subscriptionId, subscription);
+  await setSharedDataSubscription(subscriptionId, subscription);
 
   const locationUri = `/nudm-sdm/v2/shared-data-subscriptions/${subscriptionId}`;
 
   res.status(201).header('Location', locationUri).json(subscription);
 });
 
-router.delete('/shared-data-subscriptions/:subscriptionId', (req: Request, res: Response) => {
+router.delete('/shared-data-subscriptions/:subscriptionId', async (req: Request, res: Response) => {
   const { subscriptionId } = req.params;
 
-  if (!sharedDataSubscriptionStore.has(subscriptionId)) {
+  const hasSubscription = await hasSharedDataSubscription(subscriptionId);
+
+  if (!hasSubscription) {
     return res.status(404).json({
       title: 'Not Found',
       status: 404,
@@ -2421,16 +2425,18 @@ router.delete('/shared-data-subscriptions/:subscriptionId', (req: Request, res: 
     });
   }
 
-  sharedDataSubscriptionStore.delete(subscriptionId);
+  await deleteSharedDataSubscription(subscriptionId);
 
   res.status(204).send();
 });
 
-router.patch('/shared-data-subscriptions/:subscriptionId', (req: Request, res: Response) => {
+router.patch('/shared-data-subscriptions/:subscriptionId', async (req: Request, res: Response) => {
   const { subscriptionId } = req.params;
   const supportedFeatures = req.query['supported-features'] as string | undefined;
 
-  if (!sharedDataSubscriptionStore.has(subscriptionId)) {
+  const currentSubscription = await getSharedDataSubscription(subscriptionId);
+
+  if (!currentSubscription) {
     return res.status(404).json({
       title: 'Not Found',
       status: 404,
@@ -2440,8 +2446,6 @@ router.patch('/shared-data-subscriptions/:subscriptionId', (req: Request, res: R
   }
 
   const modification = req.body as SdmSubsModification;
-
-  const currentSubscription = sharedDataSubscriptionStore.get(subscriptionId)!;
 
   if (modification.expires !== undefined) {
     currentSubscription.expires = modification.expires;
@@ -2463,12 +2467,12 @@ router.patch('/shared-data-subscriptions/:subscriptionId', (req: Request, res: R
     currentSubscription.supportedFeatures = supportedFeatures;
   }
 
-  sharedDataSubscriptionStore.set(subscriptionId, currentSubscription);
+  await setSharedDataSubscription(subscriptionId, currentSubscription);
 
   res.status(200).json(currentSubscription);
 });
 
-router.get('/group-data/group-identifiers', (req: Request, res: Response) => {
+router.get('/group-data/group-identifiers', async (req: Request, res: Response) => {
   const extGroupId = req.query['ext-group-id'] as string | undefined;
   const intGroupId = req.query['int-group-id'] as string | undefined;
   const ueIdInd = req.query['ue-id-ind'] === 'true';
@@ -2481,8 +2485,7 @@ router.get('/group-data/group-identifiers', (req: Request, res: Response) => {
     return res.status(400).json(createMissingParameterError('Either ext-group-id or int-group-id must be provided'));
   }
 
-  const lookupKey = extGroupId || intGroupId!;
-  let groupData = groupIdentifiersStore.get(lookupKey);
+  let groupData = await getGroupIdentifiers(extGroupId, intGroupId);
 
   if (!groupData) {
     if (extGroupId) {
@@ -2511,7 +2514,7 @@ router.get('/group-data/group-identifiers', (req: Request, res: Response) => {
     }
 
     if (groupData) {
-      groupIdentifiersStore.set(lookupKey, groupData);
+      await setGroupIdentifiers(extGroupId, intGroupId, groupData);
     }
   } else {
     if (ueIdInd && !groupData.ueIdList) {
@@ -2525,7 +2528,7 @@ router.get('/group-data/group-identifiers', (req: Request, res: Response) => {
           gpsiList: [`msisdn-1234567891`]
         }
       ];
-      groupIdentifiersStore.set(lookupKey, groupData);
+      await setGroupIdentifiers(extGroupId, intGroupId, groupData);
     }
   }
 
@@ -2553,7 +2556,8 @@ router.get('/group-data/group-identifiers', (req: Request, res: Response) => {
   const responseData: GroupIdentifiers = { ...groupData };
 
   const responseHeaders: Record<string, string> = {};
-  
+
+  const lookupKey = extGroupId || intGroupId!;
   const etag = `"${lookupKey}-${Date.now()}"`;
   responseHeaders['ETag'] = etag;
   
@@ -2577,13 +2581,13 @@ router.get('/group-data/group-identifiers', (req: Request, res: Response) => {
   res.set(responseHeaders).status(200).json(responseData);
 });
 
-router.get('/shared-data/:sharedDataId', (req: Request, res: Response) => {
+router.get('/shared-data/:sharedDataId', async (req: Request, res: Response) => {
   const { sharedDataId } = req.params;
   const supportedFeatures = req.query['supported-features'] as string | undefined;
   const ifNoneMatch = req.headers['if-none-match'] as string | undefined;
   const ifModifiedSince = req.headers['if-modified-since'] as string | undefined;
 
-  const sharedData = sharedDataStore.get(sharedDataId as SharedDataId);
+  const sharedData = await getSharedData(sharedDataId as SharedDataId);
 
   if (!sharedData) {
     return res.status(404).json(createNotFoundError(`Shared data not found for sharedDataId: ${sharedDataId}`));
@@ -2619,7 +2623,7 @@ router.get('/shared-data/:sharedDataId', (req: Request, res: Response) => {
   res.set(responseHeaders).status(200).json(responseData);
 });
 
-router.get('/multiple-identifiers', (req: Request, res: Response) => {
+router.get('/multiple-identifiers', async (req: Request, res: Response) => {
   const supportedFeatures = req.query['supported-features'] as string | undefined;
   const gpsiListParam = req.query['gpsi-list'] as string | undefined;
   const supiListParam = req.query['supi-list'] as string | undefined;
@@ -2661,7 +2665,8 @@ router.get('/multiple-identifiers', (req: Request, res: Response) => {
 
       let foundSupis: string[] = [];
 
-      for (const [supi, data] of subscriptionDataStore.entries()) {
+      const map = await getAllSubscriptionData();
+      for (const [supi, data] of map.entries()) {
         if (data.amData?.gpsis?.includes(gpsi)) {
           foundSupis.push(supi);
         }
@@ -2705,7 +2710,7 @@ router.get('/multiple-identifiers', (req: Request, res: Response) => {
             smsSubscribed: true
           }
         };
-        subscriptionDataStore.set(generatedSupi, storedData);
+        await setSubscriptionData(generatedSupi, storedData);
       }
 
       ueIdList[gpsi] = {
@@ -2726,7 +2731,7 @@ router.get('/multiple-identifiers', (req: Request, res: Response) => {
         return res.status(400).json(createInvalidParameterError(`Invalid SUPI format: ${supi}`));
       }
 
-      let storedData = subscriptionDataStore.get(supi);
+      let storedData = await getSubscriptionData(supi);
 
       if (!storedData) {
         storedData = {
@@ -2763,7 +2768,7 @@ router.get('/multiple-identifiers', (req: Request, res: Response) => {
             smsSubscribed: true
           }
         };
-        subscriptionDataStore.set(supi, storedData);
+        await setSubscriptionData(supi, storedData);
       }
 
       const gpsis = storedData.amData?.gpsis || [];
@@ -2816,7 +2821,7 @@ router.get('/multiple-identifiers', (req: Request, res: Response) => {
   return res.status(200).json(response);
 });
 
-router.get('/:supi/time-sync-data', (req: Request, res: Response) => {
+router.get('/:supi/time-sync-data', async (req: Request, res: Response) => {
   const { supi } = req.params;
   const supportedFeatures = req.query['supported-features'] as string | undefined;
   const ifNoneMatch = req.headers['if-none-match'] as string | undefined;
@@ -2826,7 +2831,7 @@ router.get('/:supi/time-sync-data', (req: Request, res: Response) => {
     return res.status(400).json(createInvalidParameterError('Invalid supi format'));
   }
 
-  let storedData = subscriptionDataStore.get(supi);
+  let storedData = await getSubscriptionData(supi);
   
   if (!storedData) {
     storedData = {
@@ -2863,7 +2868,7 @@ router.get('/:supi/time-sync-data', (req: Request, res: Response) => {
         smsSubscribed: true
       }
     };
-    subscriptionDataStore.set(supi, storedData);
+    await setSubscriptionData(supi, storedData);
   }
 
   const response: TimeSyncSubscriptionData = {
@@ -2896,7 +2901,7 @@ router.get('/:supi/time-sync-data', (req: Request, res: Response) => {
   return res.status(200).json(response);
 });
 
-router.get('/:supi/ranging-slpos-data', (req: Request, res: Response) => {
+router.get('/:supi/ranging-slpos-data', async (req: Request, res: Response) => {
   const { supi } = req.params;
   const supportedFeatures = req.query['supported-features'] as string | undefined;
   const ifNoneMatch = req.headers['if-none-match'] as string | undefined;
@@ -2906,7 +2911,7 @@ router.get('/:supi/ranging-slpos-data', (req: Request, res: Response) => {
     return res.status(400).json(createInvalidParameterError('Invalid supi format'));
   }
 
-  let storedData = subscriptionDataStore.get(supi);
+  let storedData = await getSubscriptionData(supi);
   
   if (!storedData) {
     storedData = {
@@ -2943,7 +2948,7 @@ router.get('/:supi/ranging-slpos-data', (req: Request, res: Response) => {
         smsSubscribed: true
       }
     };
-    subscriptionDataStore.set(supi, storedData);
+    await setSubscriptionData(supi, storedData);
   }
 
   const response: RangingSlPosSubscriptionData = {
@@ -2980,7 +2985,7 @@ router.get('/:supi/ranging-slpos-data', (req: Request, res: Response) => {
   return res.status(200).json(response);
 });
 
-router.get('/:supi/a2x-data', (req: Request, res: Response) => {
+router.get('/:supi/a2x-data', async (req: Request, res: Response) => {
   const { supi } = req.params;
   const supportedFeatures = req.query['supported-features'] as string | undefined;
   const ifNoneMatch = req.headers['if-none-match'] as string | undefined;
@@ -2990,7 +2995,7 @@ router.get('/:supi/a2x-data', (req: Request, res: Response) => {
     return res.status(400).json(createInvalidParameterError('Invalid supi format'));
   }
 
-  let storedData = subscriptionDataStore.get(supi);
+  let storedData = await getSubscriptionData(supi);
   
   if (!storedData) {
     storedData = {
@@ -3027,7 +3032,7 @@ router.get('/:supi/a2x-data', (req: Request, res: Response) => {
         smsSubscribed: true
       }
     };
-    subscriptionDataStore.set(supi, storedData);
+    await setSubscriptionData(supi, storedData);
   }
 
   if (!storedData.a2xData) {
@@ -3051,7 +3056,7 @@ router.get('/:supi/a2x-data', (req: Request, res: Response) => {
       nrUePc5Ambr: '100 Mbps',
       ltePc5Ambr: '50 Mbps'
     };
-    subscriptionDataStore.set(supi, storedData);
+    await setSubscriptionData(supi, storedData);
   }
 
   const response: A2xSubscriptionData = {
@@ -3068,7 +3073,7 @@ router.get('/:supi/a2x-data', (req: Request, res: Response) => {
   return res.status(200).json(response);
 });
 
-router.get('/:ueId/rangingsl-privacy-data', (req: Request, res: Response) => {
+router.get('/:ueId/rangingsl-privacy-data', async (req: Request, res: Response) => {
   const { ueId } = req.params;
   const supportedFeatures = req.query['supported-features'] as string | undefined;
   const ifNoneMatch = req.headers['if-none-match'] as string | undefined;
@@ -3078,7 +3083,7 @@ router.get('/:ueId/rangingsl-privacy-data', (req: Request, res: Response) => {
     return res.status(400).json(createInvalidParameterError('Invalid ueId format'));
   }
 
-  let storedData = subscriptionDataStore.get(ueId);
+  let storedData = await getSubscriptionData(ueId);
   
   if (!storedData) {
     storedData = {
@@ -3115,7 +3120,7 @@ router.get('/:ueId/rangingsl-privacy-data', (req: Request, res: Response) => {
         smsSubscribed: true
       }
     };
-    subscriptionDataStore.set(ueId, storedData);
+    await setSubscriptionData(ueId, storedData);
   }
 
   if (!storedData.rangingSlPrivacyData) {
@@ -3143,7 +3148,7 @@ router.get('/:ueId/rangingsl-privacy-data', (req: Request, res: Response) => {
         }
       ]
     };
-    subscriptionDataStore.set(ueId, storedData);
+    await setSubscriptionData(ueId, storedData);
   }
 
   const response: RangingSlPrivacyData = {

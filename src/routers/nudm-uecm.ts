@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { getCollection } from '../db/mongodb';
-import { 
-  RegistrationDataSets, 
+import {
+  RegistrationDataSets,
   RegistrationDataSetName,
   Amf3GppAccessRegistration,
   Amf3GppAccessRegistrationModification,
@@ -35,11 +35,39 @@ import {
   Dnn,
   deepMerge,
   PatchResult,
-  AccessType
+  AccessType,
+  PlmnId
 } from '../types/common-types';
 import logger from '../utils/logger';
 
 const router = Router();
+
+interface SmfRegistrationQuery {
+  ueId: string;
+  'singleNssai.sst'?: number;
+  'singleNssai.sd'?: string;
+  dnn?: string;
+}
+
+interface AmfRegistrationQuery {
+  ueId: string;
+  servingPlmn?: PlmnId;
+}
+
+interface RoamingInfoUpdateFields {
+  servingPlmn: PlmnId;
+  roaming?: boolean;
+}
+
+interface NwdafRegistrationQuery {
+  ueId: string;
+  analyticsIds?: { $in: string[] };
+}
+
+interface Amf3GppAccessRegistrationWithRoaming extends Amf3GppAccessRegistration {
+  servingPlmn?: PlmnId;
+  roaming?: boolean;
+}
 
 const notImplemented = (req: Request, res: Response) => {
   res.status(501).json({
@@ -135,7 +163,7 @@ router.get('/:ueId/registrations', async (req: Request, res: Response) => {
         case RegistrationDataSetName.SMF_PDU_SESSIONS:
           {
             const collection = await getCollection('smfRegistrations');
-            let query: any = { ueId };
+            const query: SmfRegistrationQuery = { ueId };
 
             if (singleNssai) {
               query['singleNssai.sst'] = singleNssai.sst;
@@ -536,7 +564,7 @@ router.post('/:ueId/registrations/amf-3gpp-access/roaming-info-update', async (r
 
   try {
     const collection = await getCollection('amf3GppRegistrations');
-    const existingReg = await collection.findOne({ ueId }) as any;
+    const existingReg = await collection.findOne({ ueId }) as Amf3GppAccessRegistrationWithRoaming | null;
 
     if (!existingReg) {
       return res.status(404).json({
@@ -550,7 +578,7 @@ router.post('/:ueId/registrations/amf-3gpp-access/roaming-info-update', async (r
 
     const hasExistingRoamingInfo = existingReg.servingPlmn !== undefined;
 
-    const updateFields: any = {
+    const updateFields: RoamingInfoUpdateFields = {
       servingPlmn: roamingInfoUpdate.servingPlmn
     };
 
@@ -754,7 +782,7 @@ router.get('/:ueId/registrations/smf-registrations', async (req: Request, res: R
 
   try {
     const collection = await getCollection('smfRegistrations');
-    let query: any = { ueId };
+    const query: SmfRegistrationQuery = { ueId };
 
     if (singleNssai) {
       query['singleNssai.sst'] = singleNssai.sst;
@@ -1680,9 +1708,9 @@ router.get('/:ueId/registrations/nwdaf-registrations', async (req: Request, res:
 
   try {
     const collection = await getCollection('nwdafRegistrations');
-    
-    let query: any = { ueId };
-    
+
+    const query: NwdafRegistrationQuery = { ueId };
+
     if (analyticsIds) {
       const analyticsArray = Array.isArray(analyticsIds) ? analyticsIds : analyticsIds.split(',');
       query.analyticsIds = { $in: analyticsArray };

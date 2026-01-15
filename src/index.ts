@@ -3,6 +3,7 @@ dotenv.config();
 
 import express, { Request, Response, NextFunction } from 'express';
 import { initializeMongoDB, closeConnection, getDatabase } from './db/mongodb';
+import { initializeSdmCollections } from './db/sdm-db';
 import { authRateLimiter } from './middleware/rate-limit';
 import { correlationIdMiddleware } from './middleware/correlation-id';
 import { requestLoggerMiddleware } from './middleware/request-logger';
@@ -109,6 +110,8 @@ const startServer = async () => {
   try {
     await initializeMongoDB();
     logger.info('MongoDB connected successfully');
+    await initializeSdmCollections();
+    logger.info('SDM collections initialized');
     logger.info('Rate limiting enabled for authentication endpoints (nudm-ueau)');
 
     server = app.listen(PORT, () => {

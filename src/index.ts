@@ -2,7 +2,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import express, { Request, Response } from 'express';
-import { initializeMongoDB, closeConnection } from './db/mongodb';
+import { initializeMongoDB, closeConnection, getDatabase } from './db/mongodb';
 import { authRateLimiter } from './middleware/rate-limit';
 import { correlationIdMiddleware } from './middleware/correlation-id';
 import { requestLoggerMiddleware } from './middleware/request-logger';
@@ -26,8 +26,13 @@ app.use(express.json({ limit: '10mb' }));
 app.use(correlationIdMiddleware);
 app.use(requestLoggerMiddleware);
 
-app.get('/health', (req: Request, res: Response) => {
-  res.json({ status: 'ok' });
+app.get('/health', async (req: Request, res: Response) => {
+  try {
+    await getDatabase().admin().ping();
+    res.json({ status: 'ok' });
+  } catch (err) {
+    res.status(503).json({ status: 'error', detail: 'Database unavailable' });
+  }
 });
 
 app.use('/nudm-ee/v1', eeRouter);

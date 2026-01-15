@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import express, { Request, Response } from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import { initializeMongoDB, closeConnection, getDatabase } from './db/mongodb';
 import { authRateLimiter } from './middleware/rate-limit';
 import { correlationIdMiddleware } from './middleware/correlation-id';
@@ -47,6 +47,32 @@ app.use('/nudm-ssau/v1', ssauRouter);
 app.use('/nudm-ueau/v1', authRateLimiter, ueauRouter);
 app.use('/nudm-uecm/v1', uecmRouter);
 app.use('/nudm-ueid/v1', ueidRouter);
+
+interface ProblemDetails {
+  type?: string;
+  title: string;
+  status: number;
+  detail: string;
+  cause?: string;
+}
+
+app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
+  logger.error('Unhandled error', {
+    error: err.message,
+    stack: err.stack,
+    correlationId: (req as any).correlationId
+  });
+
+  const problemDetails: ProblemDetails = {
+    type: 'urn:3gpp:error:internal-error',
+    title: 'Internal Server Error',
+    status: 500,
+    detail: 'An unexpected error occurred',
+    cause: 'SYSTEM_FAILURE'
+  };
+
+  res.status(500).json(problemDetails);
+});
 
 let server: Server;
 

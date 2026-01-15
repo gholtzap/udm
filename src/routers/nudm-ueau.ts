@@ -194,6 +194,48 @@ router.post('/:supiOrSuci/security-information/generate-auth-data', async (req: 
     const sqnMsInt = parseInt(sqnMs, 16);
     const newSqnInt = (sqnMsInt + 32);
     sequenceNumber = newSqnInt.toString(16).padStart(12, '0').toUpperCase();
+
+    try {
+      const subscribersCollection = getCollection<SubscriberData>('subscribers');
+      let updateResult;
+      if (subscriber.subscribedData?.authenticationSubscription) {
+        updateResult = await subscribersCollection.updateOne(
+          { supi },
+          { $set: { 'subscribedData.authenticationSubscription.sequenceNumber': sequenceNumber } }
+        );
+      } else {
+        updateResult = await subscribersCollection.updateOne(
+          { supi },
+          { $set: { sequenceNumber: sequenceNumber } }
+        );
+      }
+
+      if (updateResult.matchedCount === 0 || updateResult.modifiedCount === 0) {
+        auditLog('resynchronization_failed', {
+          supi: supi,
+          reason: 'database_update_failed'
+        }, 'Resynchronization failed: Failed to persist new SQN');
+        return res.status(500).json({
+          type: 'urn:3gpp:error:internal-error',
+          title: 'Internal Server Error',
+          status: 500,
+          detail: 'Failed to persist resynchronized sequence number'
+        });
+      }
+    } catch (error) {
+      auditLog('resynchronization_failed', {
+        supi: supi,
+        reason: 'database_error',
+        error: error instanceof Error ? error.message : String(error)
+      }, 'Resynchronization failed: Database error');
+      return res.status(500).json({
+        type: 'urn:3gpp:error:internal-error',
+        title: 'Internal Server Error',
+        status: 500,
+        detail: 'Failed to persist resynchronized sequence number'
+      });
+    }
+
     auditLog('resynchronization_success', {
       supi: supi,
       new_sequence_number: sequenceNumber

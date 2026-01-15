@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import logger from '../utils/logger';
+import { createTimeoutError } from '../types/common-types';
 
 export const timeoutMiddleware = (timeout: number = 30000) => {
   return (req: Request, res: Response, next: NextFunction) => {
@@ -10,10 +11,7 @@ export const timeoutMiddleware = (timeout: number = 30000) => {
           method: req.method,
           url: req.url,
         });
-        res.status(408).json({
-          error: 'Request Timeout',
-          detail: 'The request exceeded the maximum allowed time',
-        });
+        res.status(408).json(createTimeoutError('The request exceeded the maximum allowed time'));
       }
     }, timeout);
 

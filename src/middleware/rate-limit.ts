@@ -1,6 +1,7 @@
 import rateLimit from 'express-rate-limit';
 import { Request, Response } from 'express';
 import logger from '../utils/logger';
+import { createRateLimitError } from '../types/common-types';
 
 interface RateLimitStore {
   [key: string]: {
@@ -88,11 +89,7 @@ export const authRateLimiter = rateLimit({
       ? Math.ceil((record.backoffUntil - Date.now()) / 1000)
       : 60;
 
-    res.status(429).json({
-      error: 'Too Many Requests',
-      message: 'Rate limit exceeded. Please try again later.',
-      retryAfter,
-    });
+    res.status(429).json(createRateLimitError('Rate limit exceeded. Please try again later.', retryAfter));
   },
 
   store: {

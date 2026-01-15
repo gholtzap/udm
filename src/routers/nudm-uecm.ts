@@ -36,7 +36,8 @@ import {
   deepMerge,
   PatchResult,
   AccessType,
-  PlmnId
+  PlmnId,
+  createNotImplementedError
 } from '../types/common-types';
 import logger from '../utils/logger';
 
@@ -70,11 +71,7 @@ interface Amf3GppAccessRegistrationWithRoaming extends Amf3GppAccessRegistration
 }
 
 const notImplemented = (req: Request, res: Response) => {
-  res.status(501).json({
-    title: 'Not Implemented',
-    status: 501,
-    detail: 'This endpoint is not yet implemented'
-  });
+  res.status(501).json(createNotImplementedError('This endpoint is not yet implemented'));
 };
 
 router.get('/:ueId/registrations', async (req: Request, res: Response) => {

@@ -132,6 +132,89 @@ export function createNotFoundError(detail: string) {
   };
 }
 
+export interface ProblemDetails {
+  type?: string;
+  title: string;
+  status: number;
+  detail: string;
+  cause?: string;
+  retryAfter?: number;
+}
+
+export function createInternalError(detail: string) {
+  return {
+    type: 'urn:3gpp:error:internal-error',
+    title: 'Internal Server Error',
+    status: 500,
+    detail,
+    cause: 'SYSTEM_FAILURE'
+  };
+}
+
+export function createNotImplementedError(detail: string) {
+  return {
+    type: 'urn:3gpp:error:not-implemented',
+    title: 'Not Implemented',
+    status: 501,
+    detail
+  };
+}
+
+export function createRateLimitError(detail: string, retryAfter: number) {
+  return {
+    type: 'urn:3gpp:error:too-many-requests',
+    title: 'Too Many Requests',
+    status: 429,
+    detail,
+    retryAfter
+  };
+}
+
+export function createTimeoutError(detail: string) {
+  return {
+    type: 'urn:3gpp:error:request-timeout',
+    title: 'Request Timeout',
+    status: 408,
+    detail
+  };
+}
+
+export function createServiceUnavailableError(detail: string) {
+  return {
+    type: 'urn:3gpp:error:service-unavailable',
+    title: 'Service Unavailable',
+    status: 503,
+    detail
+  };
+}
+
+export function createAuthenticationRejectedError(detail: string) {
+  return {
+    type: 'urn:3gpp:error:authentication-rejected',
+    title: 'Authentication Rejected',
+    status: 403,
+    detail
+  };
+}
+
+export function createForbiddenError(detail: string, type?: string) {
+  return {
+    type: type || 'urn:3gpp:error:forbidden',
+    title: 'Forbidden',
+    status: 403,
+    detail
+  };
+}
+
+export function createUnprocessableError(detail: string) {
+  return {
+    type: 'urn:3gpp:error:application',
+    title: 'Unprocessable Request',
+    status: 422,
+    detail
+  };
+}
+
 export const extGroupIdPattern = /^[^@]+@[^@]+$/;
 
 export function deepMerge(target: any, source: any): any {

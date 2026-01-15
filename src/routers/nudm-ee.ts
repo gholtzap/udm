@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
 import { getCollection } from '../db/mongodb';
 import { EeSubscription, CreatedEeSubscription, EventType } from '../types/nudm-ee-types';
-import { validateUeIdentity, createInvalidParameterError } from '../types/common-types';
+import { validateUeIdentity, createInvalidParameterError, createNotImplementedError } from '../types/common-types';
 
 interface PatchOperation {
   op: 'add' | 'remove' | 'replace' | 'move' | 'copy' | 'test';
@@ -27,11 +27,7 @@ interface StoredEeSubscription extends EeSubscription {
 const router = Router();
 
 const notImplemented = (req: Request, res: Response) => {
-  res.status(501).json({
-    title: 'Not Implemented',
-    status: 501,
-    detail: 'This endpoint is not yet implemented'
-  });
+  res.status(501).json(createNotImplementedError('This endpoint is not yet implemented'));
 };
 
 router.post('/:ueIdentity/ee-subscriptions', async (req: Request, res: Response) => {

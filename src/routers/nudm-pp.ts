@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { PpData, FiveGVnGroupConfiguration, MulticastMbsGroupMemb, PpDataEntry } from '../types/nudm-pp-types';
-import { validateUeIdentity, createInvalidParameterError, createNotFoundError, extGroupIdPattern, deepMerge } from '../types/common-types';
+import { validateUeIdentity, createInvalidParameterError, createNotFoundError, extGroupIdPattern, deepMerge, createNotImplementedError } from '../types/common-types';
 
 const router = Router();
 
@@ -9,11 +9,7 @@ const vnGroupStore = new Map<string, FiveGVnGroupConfiguration>();
 const mbsGroupStore = new Map<string, MulticastMbsGroupMemb>();
 
 const notImplemented = (req: Request, res: Response) => {
-  res.status(501).json({
-    title: 'Not Implemented',
-    status: 501,
-    detail: 'This endpoint is not yet implemented'
-  });
+  res.status(501).json(createNotImplementedError('This endpoint is not yet implemented'));
 };
 
 router.get('/:ueId/pp-data', (req: Request, res: Response) => {

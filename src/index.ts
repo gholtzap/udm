@@ -20,6 +20,7 @@ import uecmRouter from './routers/nudm-uecm';
 import ueidRouter from './routers/nudm-ueid';
 import { Server } from 'http';
 import logger from './utils/logger';
+import { ProblemDetails, createServiceUnavailableError, createInternalError } from './types/common-types';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -34,7 +35,7 @@ app.get('/health', async (_req: Request, res: Response) => {
     await getDatabase().admin().ping();
     res.json({ status: 'ok' });
   } catch (err) {
-    res.status(503).json({ status: 'error', detail: 'Database unavailable' });
+    res.status(503).json(createServiceUnavailableError('Database unavailable'));
   }
 });
 
@@ -49,14 +50,6 @@ app.use('/nudm-ueau/v1', authRateLimiter, ueauRouter);
 app.use('/nudm-uecm/v1', uecmRouter);
 app.use('/nudm-ueid/v1', ueidRouter);
 
-interface ProblemDetails {
-  type?: string;
-  title: string;
-  status: number;
-  detail: string;
-  cause?: string;
-}
-
 app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
   logger.error('Unhandled error', {
     error: err.message,
@@ -64,15 +57,7 @@ app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
     correlationId: (req as any).correlationId
   });
 
-  const problemDetails: ProblemDetails = {
-    type: 'urn:3gpp:error:internal-error',
-    title: 'Internal Server Error',
-    status: 500,
-    detail: 'An unexpected error occurred',
-    cause: 'SYSTEM_FAILURE'
-  };
-
-  res.status(500).json(problemDetails);
+  res.status(500).json(createInternalError('An unexpected error occurred'));
 });
 
 let server: Server;

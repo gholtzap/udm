@@ -59,7 +59,7 @@ import {
   RangingSlPrivacyInd,
   RangingSlPrivacyCheckRelatedAction
 } from '../types/nudm-sdm-types';
-import { validateUeIdentity, createInvalidParameterError, createMissingParameterError, createNotFoundError, PlmnId, Snssai, AccessType, PduSessionType } from '../types/common-types';
+import { validateUeIdentity, createInvalidParameterError, createMissingParameterError, createNotFoundError, PlmnId, Snssai, AccessType, PduSessionType, createNotImplementedError, createForbiddenError } from '../types/common-types';
 import {
   getSubscriptionData,
   setSubscriptionData,
@@ -82,11 +82,7 @@ import {
 const router = Router();
 
 const notImplemented = (req: Request, res: Response) => {
-  res.status(501).json({
-    title: 'Not Implemented',
-    status: 501,
-    detail: 'This endpoint is not yet implemented'
-  });
+  res.status(501).json(createNotImplementedError('This endpoint is not yet implemented'));
 };
 
 router.get('/:supi', async (req: Request, res: Response) => {
@@ -265,11 +261,7 @@ router.get('/:supi/nssai', async (req: Request, res: Response) => {
   }
 
   if (!storedData.amData?.nssai) {
-    return res.status(404).json({
-      title: 'Not Found',
-      status: 404,
-      detail: `NSSAI data not found for SUPI: ${supi}`
-    });
+    return res.status(404).json(createNotFoundError(`NSSAI data not found for SUPI: ${supi}`));
   }
 
   const response: Nssai = {
@@ -436,11 +428,7 @@ router.get('/:supi/am-data', async (req: Request, res: Response) => {
   }
 
   if (!storedData.amData) {
-    return res.status(404).json({
-      title: 'Not Found',
-      status: 404,
-      detail: `Access and Mobility Subscription Data not found for SUPI: ${supi}`
-    });
+    return res.status(404).json(createNotFoundError(`Access and Mobility Subscription Data not found for SUPI: ${supi}`));
   }
 
   const response: AccessAndMobilitySubscriptionData = {
@@ -590,11 +578,7 @@ router.get('/:supi/smf-select-data', async (req: Request, res: Response) => {
   }
 
   if (!storedData.smfSelData) {
-    return res.status(404).json({
-      title: 'Not Found',
-      status: 404,
-      detail: `SMF Selection Subscription Data not found for SUPI: ${supi}`
-    });
+    return res.status(404).json(createNotFoundError(`SMF Selection Subscription Data not found for SUPI: ${supi}`));
   }
 
   const response: SmfSelectionSubscriptionData = {
@@ -1055,11 +1039,7 @@ router.get('/:supi/sm-data', async (req: Request, res: Response) => {
   }
 
   if (Array.isArray(response) && response.length === 0) {
-    return res.status(404).json({
-      title: 'Not Found',
-      status: 404,
-      detail: `Session Management Subscription Data not found for SUPI: ${supi}`
-    });
+    return res.status(404).json(createNotFoundError(`Session Management Subscription Data not found for SUPI: ${supi}`));
   }
 
   const headers: Record<string, string> = {
@@ -1136,11 +1116,7 @@ router.get('/:supi/sms-data', async (req: Request, res: Response) => {
   }
 
   if (!storedData.smsSubsData) {
-    return res.status(404).json({
-      title: 'Not Found',
-      status: 404,
-      detail: `SMS Subscription Data not found for SUPI: ${supi}`
-    });
+    return res.status(404).json(createNotFoundError(`SMS Subscription Data not found for SUPI: ${supi}`));
   }
 
   const response: SmsSubscriptionData = {
@@ -1946,11 +1922,7 @@ router.delete('/:ueId/sdm-subscriptions/:subscriptionId', async (req: Request, r
   const hasSubscription = await hasSdmSubscription(ueId, subscriptionId);
 
   if (!hasSubscription) {
-    return res.status(404).json({
-      title: 'Not Found',
-      status: 404,
-      detail: 'Subscription not found'
-    });
+    return res.status(404).json(createNotFoundError('Subscription not found'));
   }
 
   await deleteSdmSubscription(ueId, subscriptionId);
@@ -1969,12 +1941,7 @@ router.patch('/:ueId/sdm-subscriptions/:subscriptionId', async (req: Request, re
   const currentSubscription = await getSdmSubscription(ueId, subscriptionId);
 
   if (!currentSubscription) {
-    return res.status(404).json({
-      title: 'Not Found',
-      status: 404,
-      detail: 'Subscription not found',
-      cause: 'SUBSCRIPTION_NOT_FOUND'
-    });
+    return res.status(404).json(createNotFoundError('Subscription not found'));
   }
 
   const modification = req.body as SdmSubsModification;
@@ -1985,12 +1952,7 @@ router.patch('/:ueId/sdm-subscriptions/:subscriptionId', async (req: Request, re
 
   if (modification.monitoredResourceUris !== undefined) {
     if (modification.monitoredResourceUris.length === 0) {
-      return res.status(403).json({
-        title: 'Forbidden',
-        status: 403,
-        detail: 'monitoredResourceUris cannot be empty',
-        cause: 'MODIFICATION_NOT_ALLOWED'
-      });
+      return res.status(403).json(createForbiddenError('monitoredResourceUris cannot be empty'));
     }
     currentSubscription.monitoredResourceUris = modification.monitoredResourceUris;
   }
@@ -2036,12 +1998,7 @@ router.get('/:ueId/id-translation-result', async (req: Request, res: Response) =
   const isGpsi = ueId.startsWith('msisdn-') || ueId.startsWith('extid-');
 
   if (!isSupi && !isGpsi) {
-    return res.status(404).json({
-      title: 'Not Found',
-      status: 404,
-      detail: 'User not found',
-      cause: 'USER_NOT_FOUND'
-    });
+    return res.status(404).json(createNotFoundError('User not found'));
   }
 
   let result: IdTranslationResult;
@@ -2205,12 +2162,7 @@ router.put('/:supi/am-data/sor-ack', async (req: Request, res: Response) => {
   const storedData = await getSubscriptionData(supi);
   
   if (!storedData) {
-    return res.status(404).json({
-      title: 'Not Found',
-      status: 404,
-      detail: 'User not found',
-      cause: 'USER_NOT_FOUND'
-    });
+    return res.status(404).json(createNotFoundError('User not found'));
   }
 
   return res.status(204).send();
@@ -2232,12 +2184,7 @@ router.put('/:supi/am-data/upu-ack', async (req: Request, res: Response) => {
   const storedData = await getSubscriptionData(supi);
   
   if (!storedData) {
-    return res.status(404).json({
-      title: 'Not Found',
-      status: 404,
-      detail: 'User not found',
-      cause: 'USER_NOT_FOUND'
-    });
+    return res.status(404).json(createNotFoundError('User not found'));
   }
 
   return res.status(204).send();
@@ -2259,12 +2206,7 @@ router.put('/:supi/am-data/subscribed-snssais-ack', async (req: Request, res: Re
   const storedData = await getSubscriptionData(supi);
   
   if (!storedData) {
-    return res.status(404).json({
-      title: 'Not Found',
-      status: 404,
-      detail: 'User not found',
-      cause: 'USER_NOT_FOUND'
-    });
+    return res.status(404).json(createNotFoundError('User not found'));
   }
 
   return res.status(204).send();
@@ -2286,12 +2228,7 @@ router.put('/:supi/am-data/cag-ack', async (req: Request, res: Response) => {
   const storedData = await getSubscriptionData(supi);
   
   if (!storedData) {
-    return res.status(404).json({
-      title: 'Not Found',
-      status: 404,
-      detail: 'User not found',
-      cause: 'USER_NOT_FOUND'
-    });
+    return res.status(404).json(createNotFoundError('User not found'));
   }
 
   return res.status(204).send();
@@ -2317,13 +2254,7 @@ router.post('/:supi/am-data/update-sor', async (req: Request, res: Response) => 
   const storedData = await getSubscriptionData(supi);
   
   if (!storedData || !storedData.amData) {
-    return res.status(404).json({
-      type: 'urn:3gpp:error:user-not-found',
-      title: 'Not Found',
-      status: 404,
-      detail: 'User not found',
-      cause: 'USER_NOT_FOUND'
-    });
+    return res.status(404).json(createNotFoundError('User not found'));
   }
 
   if (!storedData.amData.sorInfo) {
@@ -2364,12 +2295,7 @@ router.get('/shared-data', async (req: Request, res: Response) => {
   }
 
   if (result.length === 0) {
-    return res.status(404).json({
-      title: 'Not Found',
-      status: 404,
-      detail: 'Shared data not found',
-      cause: 'DATA_NOT_FOUND'
-    });
+    return res.status(404).json(createNotFoundError('Shared data not found'));
   }
 
   const headers: Record<string, string> = {
@@ -2417,12 +2343,7 @@ router.delete('/shared-data-subscriptions/:subscriptionId', async (req: Request,
   const hasSubscription = await hasSharedDataSubscription(subscriptionId);
 
   if (!hasSubscription) {
-    return res.status(404).json({
-      title: 'Not Found',
-      status: 404,
-      detail: 'Subscription not found',
-      cause: 'SUBSCRIPTION_NOT_FOUND'
-    });
+    return res.status(404).json(createNotFoundError('Subscription not found'));
   }
 
   await deleteSharedDataSubscription(subscriptionId);
@@ -2437,12 +2358,7 @@ router.patch('/shared-data-subscriptions/:subscriptionId', async (req: Request, 
   const currentSubscription = await getSharedDataSubscription(subscriptionId);
 
   if (!currentSubscription) {
-    return res.status(404).json({
-      title: 'Not Found',
-      status: 404,
-      detail: 'Subscription not found',
-      cause: 'SUBSCRIPTION_NOT_FOUND'
-    });
+    return res.status(404).json(createNotFoundError('Subscription not found'));
   }
 
   const modification = req.body as SdmSubsModification;
@@ -2453,12 +2369,7 @@ router.patch('/shared-data-subscriptions/:subscriptionId', async (req: Request, 
 
   if (modification.monitoredResourceUris !== undefined) {
     if (modification.monitoredResourceUris.length === 0) {
-      return res.status(403).json({
-        title: 'Forbidden',
-        status: 403,
-        detail: 'monitoredResourceUris cannot be empty',
-        cause: 'MODIFICATION_NOT_ALLOWED'
-      });
+      return res.status(403).json(createForbiddenError('monitoredResourceUris cannot be empty'));
     }
     currentSubscription.monitoredResourceUris = modification.monitoredResourceUris;
   }
@@ -2533,23 +2444,13 @@ router.get('/group-data/group-identifiers', async (req: Request, res: Response) 
   }
 
   if (!groupData) {
-    return res.status(404).json({
-      title: 'Not Found',
-      status: 404,
-      detail: 'Group identifier not found',
-      cause: 'GROUP_IDENTIFIER_NOT_FOUND'
-    });
+    return res.status(404).json(createNotFoundError('Group identifier not found'));
   }
 
   if (afId) {
     const allowedAfIds = ['AF001', 'AF002', 'AF003'];
     if (!allowedAfIds.includes(afId)) {
-      return res.status(403).json({
-        title: 'Forbidden',
-        status: 403,
-        detail: 'AF not allowed to access this group',
-        cause: 'AF_NOT_ALLOWED'
-      });
+      return res.status(403).json(createForbiddenError('AF not allowed to access this group'));
     }
   }
 
@@ -2799,12 +2700,7 @@ router.get('/multiple-identifiers', async (req: Request, res: Response) => {
   }
 
   if (Object.keys(ueIdList).length === 0) {
-    return res.status(404).json({
-      title: 'Not Found',
-      status: 404,
-      detail: 'No matching identifiers found',
-      cause: 'DATA_NOT_FOUND'
-    });
+    return res.status(404).json(createNotFoundError('No matching identifiers found'));
   }
 
   const response: UeIdentifiers = {

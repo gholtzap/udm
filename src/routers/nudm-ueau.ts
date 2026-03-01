@@ -518,6 +518,10 @@ router.post('/:supi/auth-events', async (req: Request, res: Response) => {
     return res.status(400).json(createInvalidParameterError('authType is required'));
   }
 
+  if (!Object.values(AuthType).includes(authEvent.authType)) {
+    return res.status(400).json(createInvalidParameterError('authType must be a valid AuthType value'));
+  }
+
   if (!authEvent.servingNetworkName) {
     return res.status(400).json(createInvalidParameterError('servingNetworkName is required'));
   }
@@ -986,14 +990,17 @@ router.put('/:supi/auth-events/:authEventId', async (req: Request, res: Response
   const { supi, authEventId } = req.params;
   const authEvent: AuthEvent = req.body;
 
-  // Validate request body
   if (!authEvent || typeof authEvent !== 'object') {
     return res.status(400).json(createInvalidParameterError('Request body must be a valid JSON object'));
   }
 
-  // Validate required fields
   if (!authEvent.nfInstanceId) {
     return res.status(400).json(createInvalidParameterError('nfInstanceId is required'));
+  }
+
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidPattern.test(authEvent.nfInstanceId)) {
+    return res.status(400).json(createInvalidParameterError('nfInstanceId must be a valid UUID'));
   }
 
   if (authEvent.success === undefined || authEvent.success === null) {
@@ -1008,17 +1015,35 @@ router.put('/:supi/auth-events/:authEventId', async (req: Request, res: Response
     return res.status(400).json(createInvalidParameterError('timeStamp is required'));
   }
 
+  if (isNaN(Date.parse(authEvent.timeStamp))) {
+    return res.status(400).json(createInvalidParameterError('timeStamp must be a valid ISO 8601 DateTime'));
+  }
+
   if (!authEvent.authType) {
     return res.status(400).json(createInvalidParameterError('authType is required'));
+  }
+
+  if (!Object.values(AuthType).includes(authEvent.authType)) {
+    return res.status(400).json(createInvalidParameterError('authType must be a valid AuthType value'));
   }
 
   if (!authEvent.servingNetworkName) {
     return res.status(400).json(createInvalidParameterError('servingNetworkName is required'));
   }
 
-  // Validate SUPI format
-  if (!supi.startsWith('imsi-')) {
-    return res.status(400).json(createInvalidParameterError('Invalid SUPI format, must start with imsi-'));
+  const snnPattern = /^(5G:mnc[0-9]{3}[.]mcc[0-9]{3}[.]3gppnetwork[.]org(:[A-F0-9]{11})?)$/;
+  if (!snnPattern.test(authEvent.servingNetworkName)) {
+    return res.status(400).json(createInvalidParameterError('servingNetworkName must match 3GPP serving network name format'));
+  }
+
+  if (!validateUeIdentity(supi, ['imsi', 'nai', 'gci', 'gli'])) {
+    return res.status(400).json(createInvalidParameterError('Invalid SUPI format'));
+  }
+
+  if (authEvent.resetIds !== undefined) {
+    if (!Array.isArray(authEvent.resetIds) || authEvent.resetIds.length < 1) {
+      return res.status(400).json(createInvalidParameterError('resetIds must be a non-empty array'));
+    }
   }
 
   let subscriber: SubscriberData | null;
@@ -1026,16 +1051,28 @@ router.put('/:supi/auth-events/:authEventId', async (req: Request, res: Response
     const subscribersCollection = getCollection<SubscriberData>('subscribers');
     subscriber = await subscribersCollection.findOne({ supi });
   } catch (error) {
-    return res.status(500).json({
-      type: 'urn:3gpp:error:internal-error',
-      title: 'Internal Server Error',
-      status: 500,
-      detail: 'Database operation failed'
-    });
+    return res.status(500).json(createInternalError('Database operation failed'));
   }
 
   if (!subscriber) {
     return res.status(404).json(createNotFoundError(`Subscriber with SUPI ${supi} not found`));
+  }
+
+  if (authEvent.authRemovalInd === true) {
+    try {
+      const authEventsCollection = getCollection<AuthEvent & { authEventId: string; supi: string }>('authEvents');
+      await authEventsCollection.deleteMany({ supi });
+    } catch (error) {
+      return res.status(500).json(createInternalError('Failed to remove authentication status'));
+    }
+
+    auditLog('auth_event_removal', {
+      supi,
+      auth_event_id: authEventId,
+      nf_instance: authEvent.nfInstanceId
+    }, 'Authentication status removed via PUT');
+
+    return res.status(204).send();
   }
 
   let existingAuthEvent;
@@ -1043,12 +1080,7 @@ router.put('/:supi/auth-events/:authEventId', async (req: Request, res: Response
     const authEventsCollection = getCollection<AuthEvent & { authEventId: string; supi: string }>('authEvents');
     existingAuthEvent = await authEventsCollection.findOne({ authEventId, supi });
   } catch (error) {
-    return res.status(500).json({
-      type: 'urn:3gpp:error:internal-error',
-      title: 'Internal Server Error',
-      status: 500,
-      detail: 'Database operation failed'
-    });
+    return res.status(500).json(createInternalError('Database operation failed'));
   }
 
   if (!existingAuthEvent) {
@@ -1057,42 +1089,84 @@ router.put('/:supi/auth-events/:authEventId', async (req: Request, res: Response
 
   try {
     const authEventsCollection = getCollection<AuthEvent & { authEventId: string; supi: string }>('authEvents');
-    const updateResult = await authEventsCollection.updateOne(
-      { authEventId, supi },
-      {
-        $set: {
-          nfInstanceId: authEvent.nfInstanceId,
-          success: authEvent.success,
-          timeStamp: authEvent.timeStamp,
-          authType: authEvent.authType,
-          servingNetworkName: authEvent.servingNetworkName,
-          authRemovalInd: authEvent.authRemovalInd ?? false,
-          nfSetId: authEvent.nfSetId,
-          resetIds: authEvent.resetIds,
-          dataRestorationCallbackUri: authEvent.dataRestorationCallbackUri,
-          udrRestartInd: authEvent.udrRestartInd ?? false,
-          lastSynchronizationTime: authEvent.lastSynchronizationTime,
-          nswoInd: authEvent.nswoInd ?? false
-        }
-      }
-    );
 
-    if (updateResult.modifiedCount === 0) {
-      return res.status(500).json({
-        type: 'urn:3gpp:error:internal-error',
-        title: 'Internal Server Error',
-        status: 500,
-        detail: 'Failed to update auth event'
-      });
+    const setFields: Record<string, any> = {
+      nfInstanceId: authEvent.nfInstanceId,
+      success: authEvent.success,
+      timeStamp: authEvent.timeStamp,
+      authType: authEvent.authType,
+      servingNetworkName: authEvent.servingNetworkName,
+      authRemovalInd: false,
+      udrRestartInd: authEvent.udrRestartInd ?? false,
+      nswoInd: authEvent.nswoInd ?? false
+    };
+
+    if (authEvent.nfSetId !== undefined) setFields.nfSetId = authEvent.nfSetId;
+    if (authEvent.resetIds !== undefined) setFields.resetIds = authEvent.resetIds;
+    if (authEvent.dataRestorationCallbackUri !== undefined) setFields.dataRestorationCallbackUri = authEvent.dataRestorationCallbackUri;
+    if (authEvent.lastSynchronizationTime !== undefined) setFields.lastSynchronizationTime = authEvent.lastSynchronizationTime;
+
+    const unsetFields: Record<string, any> = {};
+    if (authEvent.nfSetId === undefined) unsetFields.nfSetId = '';
+    if (authEvent.resetIds === undefined) unsetFields.resetIds = '';
+    if (authEvent.dataRestorationCallbackUri === undefined) unsetFields.dataRestorationCallbackUri = '';
+    if (authEvent.lastSynchronizationTime === undefined) unsetFields.lastSynchronizationTime = '';
+
+    const updateOp: Record<string, any> = { $set: setFields };
+    if (Object.keys(unsetFields).length > 0) updateOp.$unset = unsetFields;
+
+    await authEventsCollection.updateOne({ authEventId, supi }, updateOp);
+  } catch (error) {
+    return res.status(500).json(createInternalError('Failed to update auth event'));
+  }
+
+  auditLog('auth_event_updated', {
+    supi,
+    auth_event_id: authEventId,
+    success: authEvent.success,
+    auth_type: authEvent.authType,
+    serving_network: authEvent.servingNetworkName,
+    nf_instance: authEvent.nfInstanceId,
+    timestamp: authEvent.timeStamp
+  }, `Authentication event updated: ${authEvent.success ? 'SUCCESS' : 'FAILURE'}`);
+
+  return res.status(204).send();
+});
+
+router.delete('/:supi/auth-events/:authEventId', async (req: Request, res: Response) => {
+  const { supi, authEventId } = req.params;
+
+  if (!validateUeIdentity(supi, ['imsi', 'nai', 'gci', 'gli'])) {
+    return res.status(400).json(createInvalidParameterError('Invalid SUPI format'));
+  }
+
+  let subscriber: SubscriberData | null;
+  try {
+    const subscribersCollection = getCollection<SubscriberData>('subscribers');
+    subscriber = await subscribersCollection.findOne({ supi });
+  } catch (error) {
+    return res.status(500).json(createInternalError('Database operation failed'));
+  }
+
+  if (!subscriber) {
+    return res.status(404).json(createNotFoundError(`Subscriber with SUPI ${supi} not found`));
+  }
+
+  try {
+    const authEventsCollection = getCollection<AuthEvent & { authEventId: string; supi: string }>('authEvents');
+    const deleteResult = await authEventsCollection.deleteOne({ authEventId, supi });
+
+    if (deleteResult.deletedCount === 0) {
+      return res.status(404).json(createNotFoundError(`Auth event with ID ${authEventId} not found for SUPI ${supi}`));
     }
   } catch (error) {
-    return res.status(500).json({
-      type: 'urn:3gpp:error:internal-error',
-      title: 'Internal Server Error',
-      status: 500,
-      detail: 'Failed to update auth event'
-    });
+    return res.status(500).json(createInternalError('Failed to delete auth event'));
   }
+
+  auditLog('auth_event_deleted', {
+    supi,
+    auth_event_id: authEventId
+  }, 'Authentication event deleted');
 
   return res.status(204).send();
 });

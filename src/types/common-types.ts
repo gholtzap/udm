@@ -71,7 +71,7 @@ const UE_IDENTITY_PATTERNS = {
   anyUE: /^anyUE$/
 };
 
-export const suciPattern = /^suci-\d+-\d+-\d+-\d+-\d+-[\dA-Fa-f]+$/;
+export const suciPattern = /^suci-\d+-\d+-\d+-\d+-\d+-\d+-[\dA-Fa-f]+$/;
 
 export function validateUeIdentity(ueIdentity: string, allowedTypes?: (keyof typeof UE_IDENTITY_PATTERNS)[], allowCatchAll: boolean = false): boolean {
   if (!ueIdentity || ueIdentity.trim() === '') {

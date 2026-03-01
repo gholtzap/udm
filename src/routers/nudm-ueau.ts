@@ -16,6 +16,7 @@ import {
   AvEpsAka,
   AvImsGbaEapAka,
   AvEapAkaPrime,
+  AuthenticationVector,
   GbaAuthenticationInfoRequest,
   GbaAuthenticationInfoResult,
   GbaAuthType,
@@ -146,6 +147,14 @@ router.post('/:supiOrSuci/security-information/generate-auth-data', async (req: 
     sequenceNumber = subscriber.sequenceNumber;
   }
 
+  const authMethod = subscriber.subscribedData?.authenticationSubscription?.authenticationMethod
+    || subscriber.authenticationMethod
+    || '5G_AKA';
+
+  if (authMethod !== '5G_AKA' && authMethod !== 'EAP_AKA_PRIME') {
+    return res.status(400).json(createInvalidParameterError(`Unsupported authentication method: ${authMethod}`));
+  }
+
   if (!permanentKey || !operatorKey || !sequenceNumber) {
     auditLog('auth_vector_generation_failed', {
       supi: supi,
@@ -159,6 +168,32 @@ router.post('/:supiOrSuci/security-information/generate-auth-data', async (req: 
     });
   }
 
+  const credHexPattern = /^[0-9A-Fa-f]+$/;
+  if (!credHexPattern.test(permanentKey) || permanentKey.length !== 32) {
+    return res.status(500).json({
+      type: 'urn:3gpp:error:internal-error',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'Invalid permanentKey format in subscriber data'
+    });
+  }
+  if (!credHexPattern.test(operatorKey) || operatorKey.length !== 32) {
+    return res.status(500).json({
+      type: 'urn:3gpp:error:internal-error',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'Invalid operatorKey format in subscriber data'
+    });
+  }
+  if (!credHexPattern.test(sequenceNumber) || sequenceNumber.length !== 12) {
+    return res.status(500).json({
+      type: 'urn:3gpp:error:internal-error',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'Invalid sequenceNumber format in subscriber data'
+    });
+  }
+
   auditLog('key_access', {
     supi: supi,
     key_types: ['permanentKey', 'operatorKey'],
@@ -166,14 +201,25 @@ router.post('/:supiOrSuci/security-information/generate-auth-data', async (req: 
   }, 'Accessed subscriber cryptographic keys for authentication');
 
   if (authRequest.resynchronizationInfo) {
+    const hexPattern = /^[0-9A-Fa-f]+$/;
+    const resyncRand = authRequest.resynchronizationInfo.rand;
+    const resyncAuts = authRequest.resynchronizationInfo.auts;
+
+    if (!resyncRand || !hexPattern.test(resyncRand) || resyncRand.length !== 32) {
+      return res.status(400).json(createInvalidParameterError('resynchronizationInfo.rand must be exactly 32 hex characters'));
+    }
+    if (!resyncAuts || !hexPattern.test(resyncAuts) || resyncAuts.length !== 28) {
+      return res.status(400).json(createInvalidParameterError('resynchronizationInfo.auts must be exactly 28 hex characters'));
+    }
+
     auditLog('resynchronization_request', {
       supi: supi,
-      rand: authRequest.resynchronizationInfo.rand
+      rand: resyncRand
     }, 'Sequence number resynchronization requested');
     const kBuf = Buffer.from(permanentKey, 'hex');
     const opBuf = Buffer.from(operatorKey, 'hex');
-    const randBuf = Buffer.from(authRequest.resynchronizationInfo.rand, 'hex');
-    const autsBuf = Buffer.from(authRequest.resynchronizationInfo.auts, 'hex');
+    const randBuf = Buffer.from(resyncRand, 'hex');
+    const autsBuf = Buffer.from(resyncAuts, 'hex');
     const amfBuf = Buffer.from(amf, 'hex');
 
     const sqnMs = processAuts(kBuf, opBuf, randBuf, autsBuf, amfBuf);
@@ -192,7 +238,7 @@ router.post('/:supiOrSuci/security-information/generate-auth-data', async (req: 
     }
 
     const sqnMsInt = parseInt(sqnMs, 16);
-    const newSqnInt = (sqnMsInt + 32);
+    const newSqnInt = (sqnMsInt + 32) & 0xFFFFFFFFFFFF;
     sequenceNumber = newSqnInt.toString(16).padStart(12, '0').toUpperCase();
 
     try {
@@ -210,7 +256,7 @@ router.post('/:supiOrSuci/security-information/generate-auth-data', async (req: 
         );
       }
 
-      if (updateResult.matchedCount === 0 || updateResult.modifiedCount === 0) {
+      if (updateResult.matchedCount === 0) {
         auditLog('resynchronization_failed', {
           supi: supi,
           reason: 'database_update_failed'
@@ -258,30 +304,53 @@ router.post('/:supiOrSuci/security-information/generate-auth-data', async (req: 
 
   const autn = Buffer.concat([sqnXorAk, amfBuf, milenageOutput.mac_a]).toString('hex').toUpperCase();
 
-  const kausf = computeKausf(
-    milenageOutput.ck, 
-    milenageOutput.ik, 
-    authRequest.servingNetworkName, 
-    sqnXorAk
-  );
+  let authVector: AuthenticationVector;
+  let authType: AuthType;
 
-  const xresStar = computeXresStar(
-    milenageOutput.res,
-    randBuf,
-    authRequest.servingNetworkName,
-    milenageOutput.ck,
-    milenageOutput.ik
-  );
+  if (authMethod === 'EAP_AKA_PRIME') {
+    const { ckPrime, ikPrime } = computeCkPrimeIkPrime(
+      milenageOutput.ck,
+      milenageOutput.ik,
+      authRequest.servingNetworkName,
+      sqnXorAk
+    );
 
-  const authVector: Av5GHeAka = {
-    avType: AvType.FIVE_G_HE_AKA,
-    rand: rand,
-    xresStar: xresStar,
-    autn: autn,
-    kausf: kausf
-  };
+    authVector = {
+      avType: AvType.EAP_AKA_PRIME,
+      rand: rand,
+      xres: milenageOutput.res.toString('hex').toUpperCase(),
+      autn: autn,
+      ckPrime: ckPrime,
+      ikPrime: ikPrime
+    } as AvEapAkaPrime;
+    authType = AuthType.EAP_AKA_PRIME;
+  } else {
+    const kausf = computeKausf(
+      milenageOutput.ck,
+      milenageOutput.ik,
+      authRequest.servingNetworkName,
+      sqnXorAk
+    );
 
-  const newSqnInt = parseInt(sequenceNumber, 16) + 1;
+    const xresStar = computeXresStar(
+      milenageOutput.res,
+      randBuf,
+      authRequest.servingNetworkName,
+      milenageOutput.ck,
+      milenageOutput.ik
+    );
+
+    authVector = {
+      avType: AvType.FIVE_G_HE_AKA,
+      rand: rand,
+      xresStar: xresStar,
+      autn: autn,
+      kausf: kausf
+    } as Av5GHeAka;
+    authType = AuthType.FIVE_G_AKA;
+  }
+
+  const newSqnInt = (parseInt(sequenceNumber, 16) + 1) & 0xFFFFFFFFFFFF;
   const newSqn = newSqnInt.toString(16).padStart(12, '0').toUpperCase();
 
   try {
@@ -312,13 +381,14 @@ router.post('/:supiOrSuci/security-information/generate-auth-data', async (req: 
   }
 
   const authResult: AuthenticationInfoResult = {
-    authType: AuthType.FIVE_G_AKA,
+    authType: authType,
     authenticationVector: authVector,
     supi: supi
   };
 
   auditLog('auth_vector_generation_success', {
     supi: supi,
+    auth_method: authMethod,
     serving_network: authRequest.servingNetworkName,
     ausf_instance: authRequest.ausfInstanceId
   }, 'Authentication vector generated successfully');
@@ -950,8 +1020,7 @@ router.post('/:supi/gba-security-information/generate-av', async (req: Request, 
     ik: milenageOutput.ik.toString('hex').toUpperCase()
   };
 
-  // Update sequence number in database
-  const newSqnInt = parseInt(sequenceNumber, 16) + 1;
+  const newSqnInt = (parseInt(sequenceNumber, 16) + 1) & 0xFFFFFFFFFFFF;
   const newSqn = newSqnInt.toString(16).padStart(12, '0').toUpperCase();
 
   try {
@@ -1097,8 +1166,7 @@ router.post('/:supiOrSuci/prose-security-information/generate-av', async (req: R
     ikPrime: ikPrime
   };
 
-  // Update sequence number in database
-  const newSqnInt = parseInt(sequenceNumber, 16) + 1;
+  const newSqnInt = (parseInt(sequenceNumber, 16) + 1) & 0xFFFFFFFFFFFF;
   const newSqn = newSqnInt.toString(16).padStart(12, '0').toUpperCase();
 
   try {

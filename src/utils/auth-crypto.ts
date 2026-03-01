@@ -142,7 +142,7 @@ export function processAuts(k: Buffer, op: Buffer, rand: Buffer, auts: Buffer, a
   const sqnMsXorAkStar = auts.slice(0, 6);
   const receivedMacS = auts.slice(6, 14);
 
-  const mil = new Milenage({ op_c: new Uint8Array(op), key: new Uint8Array(k) }) as any;
+  const mil = new Milenage({ op_c: new Uint8Array(op), key: new Uint8Array(k) });
   const f5starResult = mil.f5star(new Uint8Array(rand));
   const akStar = Buffer.from(f5starResult.ak_s);
 

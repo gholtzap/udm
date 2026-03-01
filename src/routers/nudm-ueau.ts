@@ -24,7 +24,7 @@ import {
   ProSeAuthenticationInfoRequest,
   ProSeAuthenticationInfoResult
 } from '../types/nudm-ueau-types';
-import { createNotFoundError, createInvalidParameterError, createMissingParameterError, createNotImplementedError, createInternalError, createAuthenticationRejectedError, suciPattern, PlmnId } from '../types/common-types';
+import { createNotFoundError, createInvalidParameterError, createMissingParameterError, createNotImplementedError, createInternalError, createAuthenticationRejectedError, suciPattern, PlmnId, validateUeIdentity } from '../types/common-types';
 import {
   generateRand,
   milenage,
@@ -493,6 +493,11 @@ router.post('/:supi/auth-events', async (req: Request, res: Response) => {
     return res.status(400).json(createInvalidParameterError('nfInstanceId is required'));
   }
 
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidPattern.test(authEvent.nfInstanceId)) {
+    return res.status(400).json(createInvalidParameterError('nfInstanceId must be a valid UUID'));
+  }
+
   if (authEvent.success === undefined || authEvent.success === null) {
     return res.status(400).json(createInvalidParameterError('success is required'));
   }
@@ -505,6 +510,10 @@ router.post('/:supi/auth-events', async (req: Request, res: Response) => {
     return res.status(400).json(createInvalidParameterError('timeStamp is required'));
   }
 
+  if (isNaN(Date.parse(authEvent.timeStamp))) {
+    return res.status(400).json(createInvalidParameterError('timeStamp must be a valid ISO 8601 DateTime'));
+  }
+
   if (!authEvent.authType) {
     return res.status(400).json(createInvalidParameterError('authType is required'));
   }
@@ -513,8 +522,19 @@ router.post('/:supi/auth-events', async (req: Request, res: Response) => {
     return res.status(400).json(createInvalidParameterError('servingNetworkName is required'));
   }
 
-  if (!supi.startsWith('imsi-')) {
-    return res.status(400).json(createInvalidParameterError('Invalid SUPI format, must start with imsi-'));
+  const snnPattern = /^(5G:mnc[0-9]{3}[.]mcc[0-9]{3}[.]3gppnetwork[.]org(:[A-F0-9]{11})?)$/;
+  if (!snnPattern.test(authEvent.servingNetworkName)) {
+    return res.status(400).json(createInvalidParameterError('servingNetworkName must match 3GPP serving network name format'));
+  }
+
+  if (!validateUeIdentity(supi, ['imsi', 'nai', 'gci', 'gli'])) {
+    return res.status(400).json(createInvalidParameterError('Invalid SUPI format'));
+  }
+
+  if (authEvent.resetIds !== undefined) {
+    if (!Array.isArray(authEvent.resetIds) || authEvent.resetIds.length < 1) {
+      return res.status(400).json(createInvalidParameterError('resetIds must be a non-empty array'));
+    }
   }
 
   auditLog('auth_event_received', {
@@ -531,16 +551,22 @@ router.post('/:supi/auth-events', async (req: Request, res: Response) => {
     const subscribersCollection = getCollection<SubscriberData>('subscribers');
     subscriber = await subscribersCollection.findOne({ supi });
   } catch (error) {
-    return res.status(500).json({
-      type: 'urn:3gpp:error:internal-error',
-      title: 'Internal Server Error',
-      status: 500,
-      detail: 'Database operation failed'
-    });
+    return res.status(500).json(createInternalError('Database operation failed'));
   }
 
   if (!subscriber) {
     return res.status(404).json(createNotFoundError(`Subscriber with SUPI ${supi} not found`));
+  }
+
+  if (authEvent.authRemovalInd === true) {
+    try {
+      const authEventsCollection = getCollection<AuthEvent & { authEventId: string; supi: string }>('authEvents');
+      await authEventsCollection.deleteMany({ supi });
+    } catch (error) {
+      return res.status(500).json(createInternalError('Failed to remove authentication status'));
+    }
+
+    return res.status(204).send();
   }
 
   const authEventId = randomUUID();
@@ -553,7 +579,7 @@ router.post('/:supi/auth-events', async (req: Request, res: Response) => {
     timeStamp: authEvent.timeStamp,
     authType: authEvent.authType,
     servingNetworkName: authEvent.servingNetworkName,
-    authRemovalInd: authEvent.authRemovalInd ?? false,
+    authRemovalInd: false,
     nfSetId: authEvent.nfSetId,
     resetIds: authEvent.resetIds,
     dataRestorationCallbackUri: authEvent.dataRestorationCallbackUri,
@@ -566,18 +592,12 @@ router.post('/:supi/auth-events', async (req: Request, res: Response) => {
     const authEventsCollection = getCollection<AuthEvent & { authEventId: string; supi: string }>('authEvents');
     await authEventsCollection.insertOne(authEventRecord);
   } catch (error) {
-    return res.status(500).json({
-      type: 'urn:3gpp:error:internal-error',
-      title: 'Internal Server Error',
-      status: 500,
-      detail: 'Failed to store authentication event'
-    });
+    return res.status(500).json(createInternalError('Failed to store authentication event'));
   }
 
-  const location = `/nudm-ueau/v1/${supi}/auth-events/${authEventId}`;
+  const location = `${req.protocol}://${req.get('host')}/nudm-ueau/v1/${supi}/auth-events/${authEventId}`;
   res.setHeader('Location', location);
 
-  // Return the created auth event (201 Created)
   return res.status(201).json({
     nfInstanceId: authEvent.nfInstanceId,
     success: authEvent.success,

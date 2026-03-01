@@ -24,7 +24,7 @@ import {
   ProSeAuthenticationInfoRequest,
   ProSeAuthenticationInfoResult
 } from '../types/nudm-ueau-types';
-import { createNotFoundError, createInvalidParameterError, suciPattern } from '../types/common-types';
+import { createNotFoundError, createInvalidParameterError, createMissingParameterError, createNotImplementedError, createInternalError, createAuthenticationRejectedError, suciPattern, PlmnId } from '../types/common-types';
 import {
   generateRand,
   milenage,
@@ -398,16 +398,35 @@ router.post('/:supiOrSuci/security-information/generate-auth-data', async (req: 
 
 router.get('/:supiOrSuci/security-information-rg', async (req: Request, res: Response) => {
   const { supiOrSuci } = req.params;
+  const authenticatedInd = req.query['authenticated-ind'];
+  const supportedFeatures = req.query['supported-features'] as string | undefined;
+  const plmnIdParam = req.query['plmn-id'] as string | undefined;
+
+  if (authenticatedInd === undefined || authenticatedInd === null) {
+    return res.status(400).json(createMissingParameterError('authenticated-ind query parameter is required'));
+  }
+
+  const authIndInput = authenticatedInd === 'true';
+  if (authenticatedInd !== 'true' && authenticatedInd !== 'false') {
+    return res.status(400).json(createInvalidParameterError('authenticated-ind must be a boolean value'));
+  }
+
+  let plmnId: PlmnId | undefined;
+  if (plmnIdParam) {
+    try {
+      plmnId = JSON.parse(plmnIdParam);
+      if (!plmnId?.mcc || !plmnId?.mnc) {
+        return res.status(400).json(createInvalidParameterError('plmn-id must contain mcc and mnc'));
+      }
+    } catch {
+      return res.status(400).json(createInvalidParameterError('plmn-id must be a valid JSON object'));
+    }
+  }
 
   let supi = supiOrSuci;
 
   if (suciPattern.test(supiOrSuci)) {
-    return res.status(501).json({
-      type: 'urn:3gpp:error:not-implemented',
-      title: 'Not Implemented',
-      status: 501,
-      detail: 'SUCI de-concealment is not yet implemented'
-    });
+    return res.status(501).json(createNotImplementedError('SUCI de-concealment is not yet implemented'));
   }
 
   if (!supi.startsWith('imsi-')) {
@@ -419,16 +438,17 @@ router.get('/:supiOrSuci/security-information-rg', async (req: Request, res: Res
     const subscribersCollection = getCollection<SubscriberData>('subscribers');
     subscriber = await subscribersCollection.findOne({ supi });
   } catch (error) {
-    return res.status(500).json({
-      type: 'urn:3gpp:error:internal-error',
-      title: 'Internal Server Error',
-      status: 500,
-      detail: 'Database operation failed'
-    });
+    return res.status(500).json(createInternalError('Database operation failed'));
   }
 
   if (!subscriber) {
-    return res.status(404).json(createNotFoundError(`Subscriber with SUPI ${supi} not found`));
+    return res.status(404).json({
+      type: 'urn:3gpp:error:not-found',
+      title: 'Not Found',
+      status: 404,
+      detail: 'Subscriber not found',
+      cause: 'USER_NOT_FOUND'
+    });
   }
 
   let permanentKey: string;
@@ -446,11 +466,16 @@ router.get('/:supiOrSuci/security-information-rg', async (req: Request, res: Res
     sequenceNumber = subscriber.sequenceNumber;
   }
 
-  const authInd = !!(permanentKey && operatorKey && sequenceNumber);
+  const hasCredentials = !!(permanentKey && operatorKey && sequenceNumber);
+
+  if (!hasCredentials) {
+    return res.status(403).json(createAuthenticationRejectedError('Subscriber does not have required authentication subscription data'));
+  }
 
   const rgAuthCtx: RgAuthCtx = {
-    authInd: authInd,
-    supi: supi
+    authInd: true,
+    supi: supi,
+    ...(supportedFeatures && { supportedFeatures })
   };
 
   return res.status(200).json(rgAuthCtx);

@@ -803,7 +803,7 @@ describe('GET /:supiOrSuci/security-information-rg', () => {
   describe('Success cases', () => {
     it('should retrieve RG auth context with valid SUPI', async () => {
       const response = await request(app)
-        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg`)
+        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg?authenticated-ind=true`)
         .expect(200)
         .expect('Content-Type', /json/);
 
@@ -813,52 +813,52 @@ describe('GET /:supiOrSuci/security-information-rg', () => {
 
     it('should return authInd true when all credentials exist', async () => {
       const response = await request(app)
-        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg`)
+        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg?authenticated-ind=false`)
         .expect(200);
 
       expect(response.body.authInd).to.be.true;
     });
 
-    it('should return authInd false when permanentKey is missing', async () => {
+    it('should return 403 when permanentKey is missing', async () => {
       (mockCollection.findOne as sinon.SinonStub).resolves({
         ...mockSubscriber,
         permanentKey: ''
       });
 
       const response = await request(app)
-        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg`)
-        .expect(200);
+        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg?authenticated-ind=true`)
+        .expect(403);
 
-      expect(response.body.authInd).to.be.false;
+      expect(response.body).to.have.property('status', 403);
     });
 
-    it('should return authInd false when operatorKey is missing', async () => {
+    it('should return 403 when operatorKey is missing', async () => {
       (mockCollection.findOne as sinon.SinonStub).resolves({
         ...mockSubscriber,
         operatorKey: ''
       });
 
       const response = await request(app)
-        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg`)
-        .expect(200);
+        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg?authenticated-ind=true`)
+        .expect(403);
 
-      expect(response.body.authInd).to.be.false;
+      expect(response.body).to.have.property('status', 403);
     });
 
-    it('should return authInd false when sequenceNumber is missing', async () => {
+    it('should return 403 when sequenceNumber is missing', async () => {
       (mockCollection.findOne as sinon.SinonStub).resolves({
         ...mockSubscriber,
         sequenceNumber: ''
       });
 
       const response = await request(app)
-        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg`)
-        .expect(200);
+        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg?authenticated-ind=true`)
+        .expect(403);
 
-      expect(response.body.authInd).to.be.false;
+      expect(response.body).to.have.property('status', 403);
     });
 
-    it('should return authInd false when all credentials are missing', async () => {
+    it('should return 403 when all credentials are missing', async () => {
       (mockCollection.findOne as sinon.SinonStub).resolves({
         ...mockSubscriber,
         permanentKey: '',
@@ -867,24 +867,24 @@ describe('GET /:supiOrSuci/security-information-rg', () => {
       });
 
       const response = await request(app)
-        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg`)
-        .expect(200);
+        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg?authenticated-ind=true`)
+        .expect(403);
 
-      expect(response.body.authInd).to.be.false;
+      expect(response.body).to.have.property('status', 403);
     });
 
     it('should handle nested authentication subscription structure', async () => {
       (mockCollection.findOne as sinon.SinonStub).resolves(mockSubscriberNested);
 
       const response = await request(app)
-        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg`)
+        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg?authenticated-ind=true`)
         .expect(200);
 
       expect(response.body).to.have.property('authInd', true);
       expect(response.body).to.have.property('supi', validSupi);
     });
 
-    it('should handle nested structure with missing permanentKey', async () => {
+    it('should return 403 for nested structure with missing permanentKey', async () => {
       (mockCollection.findOne as sinon.SinonStub).resolves({
         ...mockSubscriberNested,
         subscribedData: {
@@ -899,15 +899,15 @@ describe('GET /:supiOrSuci/security-information-rg', () => {
       });
 
       const response = await request(app)
-        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg`)
-        .expect(200);
+        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg?authenticated-ind=true`)
+        .expect(403);
 
-      expect(response.body.authInd).to.be.false;
+      expect(response.body).to.have.property('status', 403);
     });
 
     it('should return SUPI in response', async () => {
       const response = await request(app)
-        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg`)
+        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg?authenticated-ind=true`)
         .expect(200);
 
       expect(response.body.supi).to.equal(validSupi);
@@ -924,7 +924,7 @@ describe('GET /:supiOrSuci/security-information-rg', () => {
         (mockCollection.findOne as sinon.SinonStub).resolves({ ...mockSubscriber, supi: imsi });
 
         const response = await request(app)
-          .get(`/nudm-ueau/v1/${imsi}/security-information-rg`)
+          .get(`/nudm-ueau/v1/${imsi}/security-information-rg?authenticated-ind=true`)
           .expect(200);
 
         expect(response.body.supi).to.equal(imsi);
@@ -934,18 +934,71 @@ describe('GET /:supiOrSuci/security-information-rg', () => {
 
     it('should query database with correct SUPI', async () => {
       await request(app)
-        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg`)
+        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg?authenticated-ind=true`)
         .expect(200);
 
       expect((mockCollection.findOne as sinon.SinonStub).calledOnce).to.be.true;
       expect((mockCollection.findOne as sinon.SinonStub).getCall(0).args[0]).to.deep.equal({ supi: validSupi });
     });
+
+    it('should echo supported-features in response when provided', async () => {
+      const response = await request(app)
+        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg?authenticated-ind=true&supported-features=abc`)
+        .expect(200);
+
+      expect(response.body).to.have.property('supportedFeatures', 'abc');
+    });
+
+    it('should not include supportedFeatures when not provided', async () => {
+      const response = await request(app)
+        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg?authenticated-ind=true`)
+        .expect(200);
+
+      expect(response.body).to.not.have.property('supportedFeatures');
+    });
   });
 
   describe('Validation error cases', () => {
+    it('should return 400 when authenticated-ind is missing', async () => {
+      const response = await request(app)
+        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg`)
+        .expect(400)
+        .expect('Content-Type', /json/);
+
+      expect(response.body).to.have.property('status', 400);
+      expect(response.body.detail).to.include('authenticated-ind');
+    });
+
+    it('should return 400 when authenticated-ind is not a boolean', async () => {
+      const response = await request(app)
+        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg?authenticated-ind=maybe`)
+        .expect(400);
+
+      expect(response.body).to.have.property('status', 400);
+      expect(response.body).to.have.property('cause', 'INVALID_PARAMETER');
+    });
+
+    it('should return 400 when plmn-id is invalid JSON', async () => {
+      const response = await request(app)
+        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg?authenticated-ind=true&plmn-id=notjson`)
+        .expect(400);
+
+      expect(response.body).to.have.property('status', 400);
+      expect(response.body.detail).to.include('plmn-id');
+    });
+
+    it('should return 400 when plmn-id is missing mcc or mnc', async () => {
+      const response = await request(app)
+        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg?authenticated-ind=true&plmn-id=${encodeURIComponent('{"mcc":"001"}')}`)
+        .expect(400);
+
+      expect(response.body).to.have.property('status', 400);
+      expect(response.body.detail).to.include('plmn-id');
+    });
+
     it('should return 400 when SUPI does not start with imsi-', async () => {
       const response = await request(app)
-        .get('/nudm-ueau/v1/msisdn-1234567890/security-information-rg')
+        .get('/nudm-ueau/v1/msisdn-1234567890/security-information-rg?authenticated-ind=true')
         .expect(400)
         .expect('Content-Type', /json/);
 
@@ -958,7 +1011,7 @@ describe('GET /:supiOrSuci/security-information-rg', () => {
 
     it('should return 400 for SUPI with invalid prefix', async () => {
       const response = await request(app)
-        .get('/nudm-ueau/v1/nai-user@example.com/security-information-rg')
+        .get('/nudm-ueau/v1/nai-user@example.com/security-information-rg?authenticated-ind=true')
         .expect(400);
 
       expect(response.body).to.have.property('status', 400);
@@ -967,7 +1020,7 @@ describe('GET /:supiOrSuci/security-information-rg', () => {
 
     it('should return 400 for empty SUPI', async () => {
       const response = await request(app)
-        .get('/nudm-ueau/v1/ /security-information-rg')
+        .get('/nudm-ueau/v1/ /security-information-rg?authenticated-ind=true')
         .expect(400);
 
       expect(response.body).to.have.property('status', 400);
@@ -979,7 +1032,7 @@ describe('GET /:supiOrSuci/security-information-rg', () => {
       const suci = 'suci-0-001-01-0-0-0123456789ABCDEF';
 
       const response = await request(app)
-        .get(`/nudm-ueau/v1/${suci}/security-information-rg`)
+        .get(`/nudm-ueau/v1/${suci}/security-information-rg?authenticated-ind=true`)
         .expect(501)
         .expect('Content-Type', /json/);
 
@@ -998,7 +1051,7 @@ describe('GET /:supiOrSuci/security-information-rg', () => {
 
       for (const suci of sucis) {
         const response = await request(app)
-          .get(`/nudm-ueau/v1/${suci}/security-information-rg`)
+          .get(`/nudm-ueau/v1/${suci}/security-information-rg?authenticated-ind=true`)
           .expect(501);
 
         expect(response.body).to.have.property('status', 501);
@@ -1011,7 +1064,7 @@ describe('GET /:supiOrSuci/security-information-rg', () => {
       (mockCollection.findOne as sinon.SinonStub).resolves(null);
 
       const response = await request(app)
-        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg`)
+        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg?authenticated-ind=true`)
         .expect(404)
         .expect('Content-Type', /json/);
 
@@ -1019,25 +1072,35 @@ describe('GET /:supiOrSuci/security-information-rg', () => {
       expect(response.body).to.have.property('title', 'Not Found');
       expect(response.body).to.have.property('detail');
       expect(response.body.detail).to.include('not found');
-      expect(response.body).to.have.property('cause', 'DATA_NOT_FOUND');
+      expect(response.body).to.have.property('cause', 'USER_NOT_FOUND');
     });
 
     it('should return 404 for non-existent IMSI', async () => {
       (mockCollection.findOne as sinon.SinonStub).resolves(null);
 
       const response = await request(app)
-        .get('/nudm-ueau/v1/imsi-000000000000000/security-information-rg')
+        .get('/nudm-ueau/v1/imsi-000000000000000/security-information-rg?authenticated-ind=true')
         .expect(404);
 
       expect(response.body).to.have.property('status', 404);
-      expect(response.body).to.have.property('cause', 'DATA_NOT_FOUND');
+      expect(response.body).to.have.property('cause', 'USER_NOT_FOUND');
+    });
+
+    it('should not leak SUPI in 404 error detail', async () => {
+      (mockCollection.findOne as sinon.SinonStub).resolves(null);
+
+      const response = await request(app)
+        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg?authenticated-ind=true`)
+        .expect(404);
+
+      expect(response.body.detail).to.not.include(validSupi);
     });
   });
 
   describe('Response structure validation', () => {
     it('should return complete RgAuthCtx structure', async () => {
       const response = await request(app)
-        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg`)
+        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg?authenticated-ind=true`)
         .expect(200);
 
       expect(response.body).to.be.an('object');
@@ -1047,7 +1110,7 @@ describe('GET /:supiOrSuci/security-information-rg', () => {
 
     it('should return authInd as boolean', async () => {
       const response = await request(app)
-        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg`)
+        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg?authenticated-ind=true`)
         .expect(200);
 
       expect(response.body.authInd).to.be.a('boolean');
@@ -1055,7 +1118,7 @@ describe('GET /:supiOrSuci/security-information-rg', () => {
 
     it('should return supi as string', async () => {
       const response = await request(app)
-        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg`)
+        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg?authenticated-ind=true`)
         .expect(200);
 
       expect(response.body.supi).to.be.a('string');
@@ -1063,7 +1126,7 @@ describe('GET /:supiOrSuci/security-information-rg', () => {
 
     it('should include all required RgAuthCtx fields', async () => {
       const response = await request(app)
-        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg`)
+        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg?authenticated-ind=true`)
         .expect(200);
 
       expect(response.body).to.include.all.keys('authInd', 'supi');
@@ -1076,7 +1139,7 @@ describe('GET /:supiOrSuci/security-information-rg', () => {
       (mockCollection.findOne as sinon.SinonStub).resolves({ ...mockSubscriber, supi: longImsi });
 
       const response = await request(app)
-        .get(`/nudm-ueau/v1/${longImsi}/security-information-rg`)
+        .get(`/nudm-ueau/v1/${longImsi}/security-information-rg?authenticated-ind=true`)
         .expect(200);
 
       expect(response.body.supi).to.equal(longImsi);
@@ -1086,23 +1149,23 @@ describe('GET /:supiOrSuci/security-information-rg', () => {
       (mockCollection.findOne as sinon.SinonStub).resolves(mockSubscriber);
 
       const response = await request(app)
-        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg`)
+        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg?authenticated-ind=true`)
         .expect(200);
 
       expect(response.body).to.have.property('authInd', true);
     });
 
-    it('should handle undefined credentials gracefully', async () => {
+    it('should return 403 for undefined credentials', async () => {
       (mockCollection.findOne as sinon.SinonStub).resolves({
         supi: validSupi,
         authenticationMethod: '5G_AKA'
       });
 
       const response = await request(app)
-        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg`)
-        .expect(200);
+        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg?authenticated-ind=true`)
+        .expect(403);
 
-      expect(response.body.authInd).to.be.false;
+      expect(response.body).to.have.property('status', 403);
     });
 
     it('should handle partial nested structure', async () => {
@@ -1116,7 +1179,7 @@ describe('GET /:supiOrSuci/security-information-rg', () => {
       });
 
       const response = await request(app)
-        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg`)
+        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg?authenticated-ind=true`)
         .expect(200);
 
       expect(response.body.authInd).to.be.true;
@@ -1127,7 +1190,7 @@ describe('GET /:supiOrSuci/security-information-rg', () => {
       for (let i = 0; i < 10; i++) {
         promises.push(
           request(app)
-            .get(`/nudm-ueau/v1/${validSupi}/security-information-rg`)
+            .get(`/nudm-ueau/v1/${validSupi}/security-information-rg?authenticated-ind=true`)
         );
       }
 
@@ -1138,6 +1201,14 @@ describe('GET /:supiOrSuci/security-information-rg', () => {
         expect(response.body).to.have.property('authInd');
         expect(response.body).to.have.property('supi', validSupi);
       });
+    });
+
+    it('should accept authenticated-ind=false', async () => {
+      const response = await request(app)
+        .get(`/nudm-ueau/v1/${validSupi}/security-information-rg?authenticated-ind=false`)
+        .expect(200);
+
+      expect(response.body).to.have.property('authInd', true);
     });
   });
 });

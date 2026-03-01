@@ -628,8 +628,8 @@ router.post('/:supi/hss-security-information/:hssAuthType/generate-av', async (r
     return res.status(400).json(createInvalidParameterError('numOfRequestedVectors is required'));
   }
 
-  if (hssAuthRequest.numOfRequestedVectors < 1 || hssAuthRequest.numOfRequestedVectors > 32) {
-    return res.status(400).json(createInvalidParameterError('numOfRequestedVectors must be between 1 and 32'));
+  if (!Number.isInteger(hssAuthRequest.numOfRequestedVectors) || hssAuthRequest.numOfRequestedVectors < 1 || hssAuthRequest.numOfRequestedVectors > 32) {
+    return res.status(400).json(createInvalidParameterError('numOfRequestedVectors must be an integer between 1 and 32'));
   }
 
   // Validate SUPI format
@@ -691,6 +691,10 @@ router.post('/:supi/hss-security-information/:hssAuthType/generate-av', async (r
   }
 
   if (!permanentKey || !operatorKey || !sequenceNumber) {
+    auditLog('hss_av_generation_failed', {
+      supi: supi,
+      reason: 'missing_credentials'
+    }, 'HSS AV generation failed: Missing authentication credentials');
     return res.status(500).json({
       type: 'urn:3gpp:error:internal-error',
       title: 'Internal Server Error',
@@ -699,7 +703,127 @@ router.post('/:supi/hss-security-information/:hssAuthType/generate-av', async (r
     });
   }
 
-  // Generate authentication vectors
+  const credHexPattern = /^[0-9A-Fa-f]+$/;
+  if (!credHexPattern.test(permanentKey) || permanentKey.length !== 32) {
+    return res.status(500).json({
+      type: 'urn:3gpp:error:internal-error',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'Invalid permanentKey format in subscriber data'
+    });
+  }
+  if (!credHexPattern.test(operatorKey) || operatorKey.length !== 32) {
+    return res.status(500).json({
+      type: 'urn:3gpp:error:internal-error',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'Invalid operatorKey format in subscriber data'
+    });
+  }
+  if (!credHexPattern.test(sequenceNumber) || sequenceNumber.length !== 12) {
+    return res.status(500).json({
+      type: 'urn:3gpp:error:internal-error',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'Invalid sequenceNumber format in subscriber data'
+    });
+  }
+
+  auditLog('key_access', {
+    supi: supi,
+    key_types: ['permanentKey', 'operatorKey'],
+    purpose: 'hss_av_generation'
+  }, 'Accessed subscriber cryptographic keys for HSS authentication');
+
+  if (hssAuthRequest.resynchronizationInfo) {
+    const hexPattern = /^[0-9A-Fa-f]+$/;
+    const resyncRand = hssAuthRequest.resynchronizationInfo.rand;
+    const resyncAuts = hssAuthRequest.resynchronizationInfo.auts;
+
+    if (!resyncRand || !hexPattern.test(resyncRand) || resyncRand.length !== 32) {
+      return res.status(400).json(createInvalidParameterError('resynchronizationInfo.rand must be exactly 32 hex characters'));
+    }
+    if (!resyncAuts || !hexPattern.test(resyncAuts) || resyncAuts.length !== 28) {
+      return res.status(400).json(createInvalidParameterError('resynchronizationInfo.auts must be exactly 28 hex characters'));
+    }
+
+    auditLog('hss_resynchronization_request', {
+      supi: supi,
+      rand: resyncRand
+    }, 'HSS sequence number resynchronization requested');
+
+    const kBuf = Buffer.from(permanentKey, 'hex');
+    const opBuf = Buffer.from(operatorKey, 'hex');
+    const randBuf = Buffer.from(resyncRand, 'hex');
+    const autsBuf = Buffer.from(resyncAuts, 'hex');
+    const amfBuf = Buffer.from(amf, 'hex');
+
+    const sqnMs = processAuts(kBuf, opBuf, randBuf, autsBuf, amfBuf);
+
+    if (!sqnMs) {
+      auditLog('hss_resynchronization_failed', {
+        supi: supi,
+        reason: 'auts_validation_failed'
+      }, 'HSS resynchronization failed: AUTS validation failed');
+      return res.status(403).json({
+        type: 'urn:3gpp:error:authentication-rejected',
+        title: 'Authentication Rejected',
+        status: 403,
+        detail: 'AUTS validation failed'
+      });
+    }
+
+    const sqnMsInt = parseInt(sqnMs, 16);
+    const newSqnInt = (sqnMsInt + 32) & 0xFFFFFFFFFFFF;
+    sequenceNumber = newSqnInt.toString(16).padStart(12, '0').toUpperCase();
+
+    try {
+      const subscribersCollection = getCollection<SubscriberData>('subscribers');
+      let updateResult;
+      if (subscriber.subscribedData?.authenticationSubscription) {
+        updateResult = await subscribersCollection.updateOne(
+          { supi },
+          { $set: { 'subscribedData.authenticationSubscription.sequenceNumber': sequenceNumber } }
+        );
+      } else {
+        updateResult = await subscribersCollection.updateOne(
+          { supi },
+          { $set: { sequenceNumber: sequenceNumber } }
+        );
+      }
+
+      if (updateResult.matchedCount === 0) {
+        auditLog('hss_resynchronization_failed', {
+          supi: supi,
+          reason: 'database_update_failed'
+        }, 'HSS resynchronization failed: Failed to persist new SQN');
+        return res.status(500).json({
+          type: 'urn:3gpp:error:internal-error',
+          title: 'Internal Server Error',
+          status: 500,
+          detail: 'Failed to persist resynchronized sequence number'
+        });
+      }
+    } catch (error) {
+      auditLog('hss_resynchronization_failed', {
+        supi: supi,
+        reason: 'database_error',
+        error: error instanceof Error ? error.message : String(error)
+      }, 'HSS resynchronization failed: Database error');
+      return res.status(500).json({
+        type: 'urn:3gpp:error:internal-error',
+        title: 'Internal Server Error',
+        status: 500,
+        detail: 'Failed to persist resynchronized sequence number'
+      });
+    }
+
+    auditLog('hss_resynchronization_success', {
+      supi: supi,
+      new_sequence_number: sequenceNumber
+    }, 'HSS sequence number resynchronization completed successfully');
+  }
+
   const authVectors: (AvEpsAka | AvImsGbaEapAka | AvEapAkaPrime)[] = [];
   let currentSqn = sequenceNumber;
 

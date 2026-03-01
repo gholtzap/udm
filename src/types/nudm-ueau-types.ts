@@ -69,7 +69,8 @@ export enum HssAuthTypeInUri {
   EAP_AKA = "eap-aka",
   EAP_AKA_PRIME = "eap-aka-prime",
   IMS_AKA = "ims-aka",
-  GBA_AKA = "gba-aka"
+  GBA_AKA = "gba-aka",
+  UMTS_AKA = "umts-aka"
 }
 
 export enum AccessNetworkId {

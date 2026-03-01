@@ -350,7 +350,7 @@ router.post('/:supiOrSuci/security-information/generate-auth-data', async (req: 
     authType = AuthType.FIVE_G_AKA;
   }
 
-  const newSqnInt = (parseInt(sequenceNumber, 16) + 1) & 0xFFFFFFFFFFFF;
+  const newSqnInt = (parseInt(sequenceNumber, 16) + 1) % 0x1000000000000;
   const newSqn = newSqnInt.toString(16).padStart(12, '0').toUpperCase();
 
   try {
@@ -1045,7 +1045,7 @@ router.post('/:supi/gba-security-information/generate-av', async (req: Request, 
     ik: milenageOutput.ik.toString('hex').toUpperCase()
   };
 
-  const newSqnInt = (parseInt(sequenceNumber, 16) + 1) & 0xFFFFFFFFFFFF;
+  const newSqnInt = (parseInt(sequenceNumber, 16) + 1) % 0x1000000000000;
   const newSqn = newSqnInt.toString(16).padStart(12, '0').toUpperCase();
 
   try {
@@ -1191,7 +1191,7 @@ router.post('/:supiOrSuci/prose-security-information/generate-av', async (req: R
     ikPrime: ikPrime
   };
 
-  const newSqnInt = (parseInt(sequenceNumber, 16) + 1) & 0xFFFFFFFFFFFF;
+  const newSqnInt = (parseInt(sequenceNumber, 16) + 1) % 0x1000000000000;
   const newSqn = newSqnInt.toString(16).padStart(12, '0').toUpperCase();
 
   try {

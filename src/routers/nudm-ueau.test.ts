@@ -363,7 +363,7 @@ describe('POST /:supiOrSuci/security-information/generate-auth-data', () => {
 
   describe('SUCI handling', () => {
     it('should return 501 for SUCI (not yet implemented)', async () => {
-      const suci = 'suci-0-001-01-0-0-0123456789ABCDEF';
+      const suci = 'suci-0-001-01-0-0-0-0123456789ABCDEF';
 
       const response = await request(app)
         .post(`/nudm-ueau/v1/${suci}/security-information/generate-auth-data`)
@@ -379,9 +379,9 @@ describe('POST /:supiOrSuci/security-information/generate-auth-data', () => {
 
     it('should return 501 for different SUCI formats', async () => {
       const sucis = [
-        'suci-0-001-01-0-0-0123456789ABCDEF',
-        'suci-0-999-70-0-0-FEDCBA9876543210',
-        'suci-0-123-45-0-0-AAAAAAAAAAAAAAAA'
+        'suci-0-001-01-0-0-0-0123456789ABCDEF',
+        'suci-0-999-70-0-0-0-FEDCBA9876543210',
+        'suci-0-123-45-0-0-0-AAAAAAAAAAAAAAAA'
       ];
 
       for (const suci of sucis) {
@@ -1029,7 +1029,7 @@ describe('GET /:supiOrSuci/security-information-rg', () => {
 
   describe('SUCI handling', () => {
     it('should return 501 for SUCI (not yet implemented)', async () => {
-      const suci = 'suci-0-001-01-0-0-0123456789ABCDEF';
+      const suci = 'suci-0-001-01-0-0-0-0123456789ABCDEF';
 
       const response = await request(app)
         .get(`/nudm-ueau/v1/${suci}/security-information-rg?authenticated-ind=true`)
@@ -1044,9 +1044,9 @@ describe('GET /:supiOrSuci/security-information-rg', () => {
 
     it('should return 501 for different SUCI formats', async () => {
       const sucis = [
-        'suci-0-001-01-0-0-0123456789ABCDEF',
-        'suci-0-999-70-0-0-FEDCBA9876543210',
-        'suci-0-123-45-0-0-AAAAAAAAAAAAAAAA'
+        'suci-0-001-01-0-0-0-0123456789ABCDEF',
+        'suci-0-999-70-0-0-0-FEDCBA9876543210',
+        'suci-0-123-45-0-0-0-AAAAAAAAAAAAAAAA'
       ];
 
       for (const suci of sucis) {
@@ -1669,6 +1669,10 @@ describe('PUT /:supi/auth-events/:authEventId', () => {
       const authTypes = ['5G_AKA', 'EAP_AKA_PRIME', 'EAP_TLS', 'EAP_TTLS'];
 
       for (const authType of authTypes) {
+        (mockCollection.findOne as sinon.SinonStub).reset();
+        (mockCollection.findOne as sinon.SinonStub).onFirstCall().resolves(mockSubscriber);
+        (mockCollection.findOne as sinon.SinonStub).onSecondCall().resolves(mockExistingAuthEvent);
+
         const authEventWithType = {
           ...validAuthEvent,
           authType

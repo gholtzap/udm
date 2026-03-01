@@ -2381,8 +2381,8 @@ describe('POST /:supi/gba-security-information/generate-av', () => {
         .expect(200)
         .expect('Content-Type', /json/);
 
-      expect(response.body).to.have.property('threeGAkaAv');
-      expect(response.body.threeGAkaAv).to.be.an('object');
+      expect(response.body).to.have.property('3gAkaAv');
+      expect(response.body['3gAkaAv']).to.be.an('object');
     });
 
     it('should return valid 3G-AKA authentication vector structure', async () => {
@@ -2391,7 +2391,7 @@ describe('POST /:supi/gba-security-information/generate-av', () => {
         .send(validGbaRequest)
         .expect(200);
 
-      const av = response.body.threeGAkaAv;
+      const av = response.body['3gAkaAv'];
       expect(av).to.have.property('rand');
       expect(av).to.have.property('xres');
       expect(av).to.have.property('autn');
@@ -2405,7 +2405,7 @@ describe('POST /:supi/gba-security-information/generate-av', () => {
         .send(validGbaRequest)
         .expect(200);
 
-      const rand = response.body.threeGAkaAv.rand;
+      const rand = response.body['3gAkaAv'].rand;
       expect(rand).to.be.a('string');
       expect(rand).to.have.lengthOf(32);
       expect(rand).to.match(/^[A-F0-9]{32}$/);
@@ -2417,7 +2417,7 @@ describe('POST /:supi/gba-security-information/generate-av', () => {
         .send(validGbaRequest)
         .expect(200);
 
-      const autn = response.body.threeGAkaAv.autn;
+      const autn = response.body['3gAkaAv'].autn;
       expect(autn).to.be.a('string');
       expect(autn).to.have.lengthOf(32);
       expect(autn).to.match(/^[A-F0-9]{32}$/);
@@ -2429,7 +2429,7 @@ describe('POST /:supi/gba-security-information/generate-av', () => {
         .send(validGbaRequest)
         .expect(200);
 
-      const ck = response.body.threeGAkaAv.ck;
+      const ck = response.body['3gAkaAv'].ck;
       expect(ck).to.be.a('string');
       expect(ck).to.have.lengthOf(32);
       expect(ck).to.match(/^[A-F0-9]{32}$/);
@@ -2441,7 +2441,7 @@ describe('POST /:supi/gba-security-information/generate-av', () => {
         .send(validGbaRequest)
         .expect(200);
 
-      const ik = response.body.threeGAkaAv.ik;
+      const ik = response.body['3gAkaAv'].ik;
       expect(ik).to.be.a('string');
       expect(ik).to.have.lengthOf(32);
       expect(ik).to.match(/^[A-F0-9]{32}$/);
@@ -2453,7 +2453,7 @@ describe('POST /:supi/gba-security-information/generate-av', () => {
         .send(validGbaRequest)
         .expect(200);
 
-      const xres = response.body.threeGAkaAv.xres;
+      const xres = response.body['3gAkaAv'].xres;
       expect(xres).to.be.a('string');
       expect(xres.length).to.be.at.least(8);
       expect(xres.length).to.be.at.most(16);

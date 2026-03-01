@@ -203,7 +203,7 @@ export interface GbaAuthenticationInfoRequest {
 }
 
 export interface GbaAuthenticationInfoResult {
-  threeGAkaAv?: ThreeGAkaAv;
+  '3gAkaAv'?: ThreeGAkaAv;
   supportedFeatures?: string;
 }
 

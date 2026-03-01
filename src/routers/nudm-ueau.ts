@@ -28,6 +28,7 @@ import { createNotFoundError, createInvalidParameterError, createMissingParamete
 import {
   generateRand,
   milenage,
+  MilenageOutput,
   computeKausf,
   computeXresStar,
   computeCkPrimeIkPrime,
@@ -1237,7 +1238,108 @@ router.post('/:supi/gba-security-information/generate-av', async (req: Request, 
     });
   }
 
-  // Generate authentication vector for GBA
+  const credHexPattern = /^[0-9A-Fa-f]+$/;
+  if (!credHexPattern.test(permanentKey) || permanentKey.length !== 32) {
+    return res.status(500).json({
+      type: 'urn:3gpp:error:internal-error',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'Invalid permanentKey format in subscriber data'
+    });
+  }
+  if (!credHexPattern.test(operatorKey) || operatorKey.length !== 32) {
+    return res.status(500).json({
+      type: 'urn:3gpp:error:internal-error',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'Invalid operatorKey format in subscriber data'
+    });
+  }
+  if (!credHexPattern.test(sequenceNumber) || sequenceNumber.length !== 12) {
+    return res.status(500).json({
+      type: 'urn:3gpp:error:internal-error',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'Invalid sequenceNumber format in subscriber data'
+    });
+  }
+
+  auditLog('key_access', {
+    supi: supi,
+    key_types: ['permanentKey', 'operatorKey'],
+    purpose: 'gba_av_generation'
+  }, 'Accessed subscriber cryptographic keys for GBA authentication');
+
+  if (gbaAuthRequest.resynchronizationInfo) {
+    const hexPattern = /^[0-9A-Fa-f]+$/;
+    const resyncRand = gbaAuthRequest.resynchronizationInfo.rand;
+    const resyncAuts = gbaAuthRequest.resynchronizationInfo.auts;
+
+    if (!resyncRand || !hexPattern.test(resyncRand) || resyncRand.length !== 32) {
+      return res.status(400).json(createInvalidParameterError('resynchronizationInfo.rand must be exactly 32 hex characters'));
+    }
+    if (!resyncAuts || !hexPattern.test(resyncAuts) || resyncAuts.length !== 28) {
+      return res.status(400).json(createInvalidParameterError('resynchronizationInfo.auts must be exactly 28 hex characters'));
+    }
+
+    auditLog('gba_resynchronization_request', {
+      supi: supi,
+      rand: resyncRand
+    }, 'GBA sequence number resynchronization requested');
+
+    const kBuf = Buffer.from(permanentKey, 'hex');
+    const opBuf = Buffer.from(operatorKey, 'hex');
+    const randBuf = Buffer.from(resyncRand, 'hex');
+    const autsBuf = Buffer.from(resyncAuts, 'hex');
+    const amfBuf = Buffer.from(amf, 'hex');
+
+    const sqnMs = processAuts(kBuf, opBuf, randBuf, autsBuf, amfBuf);
+
+    if (!sqnMs) {
+      auditLog('gba_resynchronization_failed', {
+        supi: supi,
+        reason: 'auts_validation_failed'
+      }, 'GBA resynchronization failed: AUTS validation failed');
+      return res.status(403).json({
+        type: 'urn:3gpp:error:authentication-rejected',
+        title: 'Authentication Rejected',
+        status: 403,
+        detail: 'AUTS validation failed'
+      });
+    }
+
+    const sqnMsInt = parseInt(sqnMs, 16);
+    const newSqnInt = (sqnMsInt + 32) & 0xFFFFFFFFFFFF;
+    sequenceNumber = newSqnInt.toString(16).padStart(12, '0').toUpperCase();
+
+    try {
+      const subscribersCollection = getCollection<SubscriberData>('subscribers');
+      if (subscriber.subscribedData?.authenticationSubscription) {
+        await subscribersCollection.updateOne(
+          { supi },
+          { $set: { 'subscribedData.authenticationSubscription.sequenceNumber': sequenceNumber } }
+        );
+      } else {
+        await subscribersCollection.updateOne(
+          { supi },
+          { $set: { sequenceNumber: sequenceNumber } }
+        );
+      }
+    } catch (error) {
+      auditLog('gba_resynchronization_failed', {
+        supi: supi,
+        reason: 'database_error',
+        error: error instanceof Error ? error.message : String(error)
+      }, 'GBA resynchronization failed: Database error');
+      return res.status(500).json({
+        type: 'urn:3gpp:error:internal-error',
+        title: 'Internal Server Error',
+        status: 500,
+        detail: 'Failed to persist resynchronized sequence number'
+      });
+    }
+  }
+
   const rand = generateRand();
   const randBuf = Buffer.from(rand, 'hex');
   const kBuf = Buffer.from(permanentKey, 'hex');
@@ -1245,7 +1347,22 @@ router.post('/:supi/gba-security-information/generate-av', async (req: Request, 
   const sqnBuf = Buffer.from(sequenceNumber, 'hex');
   const amfBuf = Buffer.from(amf, 'hex');
 
-  const milenageOutput = milenage(kBuf, opBuf, randBuf, sqnBuf, amfBuf);
+  let milenageOutput: MilenageOutput;
+  try {
+    milenageOutput = milenage(kBuf, opBuf, randBuf, sqnBuf, amfBuf);
+  } catch (error) {
+    auditLog('gba_av_generation_failed', {
+      supi: supi,
+      reason: 'milenage_error',
+      error: error instanceof Error ? error.message : String(error)
+    }, 'GBA AV generation failed: Milenage computation error');
+    return res.status(500).json({
+      type: 'urn:3gpp:error:internal-error',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'Authentication vector generation failed'
+    });
+  }
 
   const sqnXorAk = Buffer.alloc(6);
   for (let i = 0; i < 6; i++) {
@@ -1289,7 +1406,7 @@ router.post('/:supi/gba-security-information/generate-av', async (req: Request, 
   }
 
   const result: GbaAuthenticationInfoResult = {
-    threeGAkaAv: threeGAkaAv,
+    '3gAkaAv': threeGAkaAv,
     supportedFeatures: gbaAuthRequest.supportedFeatures
   };
 

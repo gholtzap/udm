@@ -1417,12 +1417,10 @@ router.post('/:supiOrSuci/prose-security-information/generate-av', async (req: R
   const { supiOrSuci } = req.params;
   const proseAuthRequest: ProSeAuthenticationInfoRequest = req.body;
 
-  // Validate request body
   if (!proseAuthRequest || typeof proseAuthRequest !== 'object' || Array.isArray(proseAuthRequest)) {
     return res.status(400).json(createInvalidParameterError('Request body must be a valid JSON object'));
   }
 
-  // Validate required fields
   if (!proseAuthRequest.servingNetworkName) {
     return res.status(400).json(createInvalidParameterError('servingNetworkName is required'));
   }
@@ -1433,17 +1431,10 @@ router.post('/:supiOrSuci/prose-security-information/generate-av', async (req: R
 
   let supi = supiOrSuci;
 
-  // Handle SUCI (not implemented)
   if (suciPattern.test(supiOrSuci)) {
-    return res.status(501).json({
-      type: 'urn:3gpp:error:not-implemented',
-      title: 'Not Implemented',
-      status: 501,
-      detail: 'SUCI de-concealment is not yet implemented'
-    });
+    return res.status(501).json(createNotImplementedError('SUCI de-concealment is not yet implemented'));
   }
 
-  // Validate SUPI format
   if (!supi.startsWith('imsi-')) {
     return res.status(400).json(createInvalidParameterError('Invalid SUPI format, must start with imsi-'));
   }
@@ -1482,6 +1473,10 @@ router.post('/:supiOrSuci/prose-security-information/generate-av', async (req: R
   }
 
   if (!permanentKey || !operatorKey || !sequenceNumber) {
+    auditLog('prose_av_generation_failed', {
+      supi: supi,
+      reason: 'missing_credentials'
+    }, 'ProSe AV generation failed: Missing authentication credentials');
     return res.status(500).json({
       type: 'urn:3gpp:error:internal-error',
       title: 'Internal Server Error',
@@ -1490,8 +1485,127 @@ router.post('/:supiOrSuci/prose-security-information/generate-av', async (req: R
     });
   }
 
-  // Generate authentication vector for ProSe (EAP-AKA')
-  // Per 3GPP spec, UDM should send only one vector in the array
+  const credHexPattern = /^[0-9A-Fa-f]+$/;
+  if (!credHexPattern.test(permanentKey) || permanentKey.length !== 32) {
+    return res.status(500).json({
+      type: 'urn:3gpp:error:internal-error',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'Invalid permanentKey format in subscriber data'
+    });
+  }
+  if (!credHexPattern.test(operatorKey) || operatorKey.length !== 32) {
+    return res.status(500).json({
+      type: 'urn:3gpp:error:internal-error',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'Invalid operatorKey format in subscriber data'
+    });
+  }
+  if (!credHexPattern.test(sequenceNumber) || sequenceNumber.length !== 12) {
+    return res.status(500).json({
+      type: 'urn:3gpp:error:internal-error',
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'Invalid sequenceNumber format in subscriber data'
+    });
+  }
+
+  auditLog('key_access', {
+    supi: supi,
+    key_types: ['permanentKey', 'operatorKey'],
+    purpose: 'prose_av_generation'
+  }, 'Accessed subscriber cryptographic keys for ProSe authentication');
+
+  if (proseAuthRequest.resynchronizationInfo) {
+    const hexPattern = /^[0-9A-Fa-f]+$/;
+    const resyncRand = proseAuthRequest.resynchronizationInfo.rand;
+    const resyncAuts = proseAuthRequest.resynchronizationInfo.auts;
+
+    if (!resyncRand || !hexPattern.test(resyncRand) || resyncRand.length !== 32) {
+      return res.status(400).json(createInvalidParameterError('resynchronizationInfo.rand must be exactly 32 hex characters'));
+    }
+    if (!resyncAuts || !hexPattern.test(resyncAuts) || resyncAuts.length !== 28) {
+      return res.status(400).json(createInvalidParameterError('resynchronizationInfo.auts must be exactly 28 hex characters'));
+    }
+
+    auditLog('prose_resynchronization_request', {
+      supi: supi,
+      rand: resyncRand
+    }, 'ProSe sequence number resynchronization requested');
+
+    const kBuf = Buffer.from(permanentKey, 'hex');
+    const opBuf = Buffer.from(operatorKey, 'hex');
+    const randBuf = Buffer.from(resyncRand, 'hex');
+    const autsBuf = Buffer.from(resyncAuts, 'hex');
+    const amfBuf = Buffer.from(amf, 'hex');
+
+    const sqnMs = processAuts(kBuf, opBuf, randBuf, autsBuf, amfBuf);
+
+    if (!sqnMs) {
+      auditLog('prose_resynchronization_failed', {
+        supi: supi,
+        reason: 'auts_validation_failed'
+      }, 'ProSe resynchronization failed: AUTS validation failed');
+      return res.status(403).json({
+        type: 'urn:3gpp:error:authentication-rejected',
+        title: 'Authentication Rejected',
+        status: 403,
+        detail: 'AUTS validation failed'
+      });
+    }
+
+    const sqnMsInt = parseInt(sqnMs, 16);
+    const newSqnInt = (sqnMsInt + 32) & 0xFFFFFFFFFFFF;
+    sequenceNumber = newSqnInt.toString(16).padStart(12, '0').toUpperCase();
+
+    try {
+      const subscribersCollection = getCollection<SubscriberData>('subscribers');
+      let updateResult;
+      if (subscriber.subscribedData?.authenticationSubscription) {
+        updateResult = await subscribersCollection.updateOne(
+          { supi },
+          { $set: { 'subscribedData.authenticationSubscription.sequenceNumber': sequenceNumber } }
+        );
+      } else {
+        updateResult = await subscribersCollection.updateOne(
+          { supi },
+          { $set: { sequenceNumber: sequenceNumber } }
+        );
+      }
+
+      if (updateResult.matchedCount === 0) {
+        auditLog('prose_resynchronization_failed', {
+          supi: supi,
+          reason: 'database_update_failed'
+        }, 'ProSe resynchronization failed: Failed to persist new SQN');
+        return res.status(500).json({
+          type: 'urn:3gpp:error:internal-error',
+          title: 'Internal Server Error',
+          status: 500,
+          detail: 'Failed to persist resynchronized sequence number'
+        });
+      }
+    } catch (error) {
+      auditLog('prose_resynchronization_failed', {
+        supi: supi,
+        reason: 'database_error',
+        error: error instanceof Error ? error.message : String(error)
+      }, 'ProSe resynchronization failed: Database error');
+      return res.status(500).json({
+        type: 'urn:3gpp:error:internal-error',
+        title: 'Internal Server Error',
+        status: 500,
+        detail: 'Failed to persist resynchronized sequence number'
+      });
+    }
+
+    auditLog('prose_resynchronization_success', {
+      supi: supi,
+      new_sequence_number: sequenceNumber
+    }, 'ProSe sequence number resynchronization completed successfully');
+  }
+
   const rand = generateRand();
   const randBuf = Buffer.from(rand, 'hex');
   const kBuf = Buffer.from(permanentKey, 'hex');
@@ -1509,7 +1623,6 @@ router.post('/:supiOrSuci/prose-security-information/generate-av', async (req: R
   const autn = Buffer.concat([sqnXorAk, amfBuf, milenageOutput.mac_a]).toString('hex').toUpperCase();
   const xres = milenageOutput.res.toString('hex').toUpperCase();
 
-  // Compute CK' and IK' for EAP-AKA'
   const { ckPrime, ikPrime } = computeCkPrimeIkPrime(
     milenageOutput.ck,
     milenageOutput.ik,
@@ -1543,6 +1656,11 @@ router.post('/:supiOrSuci/prose-security-information/generate-av', async (req: R
       );
     }
   } catch (error) {
+    auditLog('prose_av_generation_failed', {
+      supi: supi,
+      reason: 'database_update_error',
+      error: error instanceof Error ? error.message : String(error)
+    }, 'ProSe AV generation failed: Failed to update sequence number');
     return res.status(500).json({
       type: 'urn:3gpp:error:internal-error',
       title: 'Internal Server Error',
@@ -1557,6 +1675,12 @@ router.post('/:supiOrSuci/prose-security-information/generate-av', async (req: R
     supi: supi,
     supportedFeatures: proseAuthRequest.supportedFeatures
   };
+
+  auditLog('prose_av_generation_success', {
+    supi: supi,
+    serving_network: proseAuthRequest.servingNetworkName,
+    relay_service_code: proseAuthRequest.relayServiceCode
+  }, 'ProSe authentication vector generated successfully');
 
   return res.status(200).json(result);
 });

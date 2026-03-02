@@ -215,6 +215,11 @@ export function createUnprocessableError(detail: string) {
   };
 }
 
+export function stripInternalFields<T>(doc: Record<string, any>): T {
+  const { _id, ueId, ...rest } = doc;
+  return rest as T;
+}
+
 export const extGroupIdPattern = /^[^@]+@[^@]+$/;
 
 export function deepMerge(target: any, source: any): any {

@@ -31,6 +31,9 @@ import {
   validateUeIdentity,
   createInvalidParameterError,
   createMissingParameterError,
+  createNotFoundError,
+  createInternalError,
+  stripInternalFields,
   Snssai,
   Dnn,
   deepMerge,
@@ -78,12 +81,12 @@ router.get('/:ueId/registrations', async (req: Request, res: Response) => {
   const { ueId } = req.params;
 
   if (!validateUeIdentity(ueId, ['imsi', 'nai', 'msisdn', 'extid'], true)) {
-    return res.status(400).json(createInvalidParameterError('Invalid ueId format'));
+    return res.status(400).type('application/problem+json').json(createInvalidParameterError('Invalid ueId format'));
   }
 
   const registrationDatasetNamesParam = req.query['registration-dataset-names'];
   if (!registrationDatasetNamesParam) {
-    return res.status(400).json(createMissingParameterError('Missing required query parameter: registration-dataset-names'));
+    return res.status(400).type('application/problem+json').json(createMissingParameterError('Missing required query parameter: registration-dataset-names'));
   }
 
   let registrationDatasetNames: string[];
@@ -92,21 +95,21 @@ router.get('/:ueId/registrations', async (req: Request, res: Response) => {
   } else if (Array.isArray(registrationDatasetNamesParam)) {
     registrationDatasetNames = registrationDatasetNamesParam as string[];
   } else {
-    return res.status(400).json(createInvalidParameterError('Invalid registration-dataset-names format'));
+    return res.status(400).type('application/problem+json').json(createInvalidParameterError('Invalid registration-dataset-names format'));
   }
 
+  registrationDatasetNames = [...new Set(registrationDatasetNames)];
+
   if (registrationDatasetNames.length < 2) {
-    return res.status(400).json(createInvalidParameterError('registration-dataset-names must contain at least 2 values'));
+    return res.status(400).type('application/problem+json').json(createInvalidParameterError('registration-dataset-names must contain at least 2 unique values'));
   }
 
   const validDatasetNames = Object.values(RegistrationDataSetName);
   const invalidNames = registrationDatasetNames.filter(name => !validDatasetNames.includes(name as RegistrationDataSetName));
-  
-  if (invalidNames.length > 0) {
-    return res.status(400).json(createInvalidParameterError(`Invalid registration-dataset-names: ${invalidNames.join(', ')}`));
-  }
 
-  const supportedFeatures = req.query['supported-features'] as string | undefined;
+  if (invalidNames.length > 0) {
+    return res.status(400).type('application/problem+json').json(createInvalidParameterError(`Invalid registration-dataset-names: ${invalidNames.join(', ')}`));
+  }
 
   let singleNssai: Snssai | undefined;
   const singleNssaiParam = req.query['single-nssai'];
@@ -117,16 +120,16 @@ router.get('/:ueId/registrations', async (req: Request, res: Response) => {
       } else {
         singleNssai = singleNssaiParam as unknown as Snssai;
       }
-      
+
       if (typeof singleNssai.sst !== 'number' || singleNssai.sst < 0 || singleNssai.sst > 255) {
-        return res.status(400).json(createInvalidParameterError('Invalid single-nssai: sst must be a number between 0 and 255'));
+        return res.status(400).type('application/problem+json').json(createInvalidParameterError('Invalid single-nssai: sst must be a number between 0 and 255'));
       }
-      
+
       if (singleNssai.sd !== undefined && typeof singleNssai.sd !== 'string') {
-        return res.status(400).json(createInvalidParameterError('Invalid single-nssai: sd must be a string'));
+        return res.status(400).type('application/problem+json').json(createInvalidParameterError('Invalid single-nssai: sd must be a string'));
       }
     } catch (error) {
-      return res.status(400).json(createInvalidParameterError('Invalid single-nssai format'));
+      return res.status(400).type('application/problem+json').json(createInvalidParameterError('Invalid single-nssai format'));
     }
   }
 
@@ -140,9 +143,9 @@ router.get('/:ueId/registrations', async (req: Request, res: Response) => {
         case RegistrationDataSetName.AMF_3GPP:
           {
             const collection = await getCollection('amf3GppRegistrations');
-            const registration = await collection.findOne({ ueId }) as Amf3GppAccessRegistration | null;
-            if (registration) {
-              registrationDataSets.amf3Gpp = registration;
+            const doc = await collection.findOne({ ueId });
+            if (doc) {
+              registrationDataSets.amf3Gpp = stripInternalFields<Amf3GppAccessRegistration>(doc as Record<string, any>);
             }
           }
           break;
@@ -150,9 +153,9 @@ router.get('/:ueId/registrations', async (req: Request, res: Response) => {
         case RegistrationDataSetName.AMF_NON_3GPP:
           {
             const collection = await getCollection('amfNon3GppRegistrations');
-            const registration = await collection.findOne({ ueId }) as AmfNon3GppAccessRegistration | null;
-            if (registration) {
-              registrationDataSets.amfNon3Gpp = registration;
+            const doc = await collection.findOne({ ueId });
+            if (doc) {
+              registrationDataSets.amfNon3Gpp = stripInternalFields<AmfNon3GppAccessRegistration>(doc as Record<string, any>);
             }
           }
           break;
@@ -173,10 +176,10 @@ router.get('/:ueId/registrations', async (req: Request, res: Response) => {
               query.dnn = dnn;
             }
 
-            const registrations = await collection.find(query).toArray();
-            if (registrations.length > 0) {
+            const docs = await collection.find(query).toArray();
+            if (docs.length > 0) {
               registrationDataSets.smfRegistration = {
-                smfRegistrationList: registrations as any[]
+                smfRegistrationList: docs.map(d => stripInternalFields<SmfRegistration>(d as Record<string, any>))
               };
             }
           }
@@ -185,9 +188,9 @@ router.get('/:ueId/registrations', async (req: Request, res: Response) => {
         case RegistrationDataSetName.SMSF_3GPP:
           {
             const collection = await getCollection('smsf3GppRegistrations');
-            const registration = await collection.findOne({ ueId }) as SmsfRegistration | null;
-            if (registration) {
-              registrationDataSets.smsf3Gpp = registration;
+            const doc = await collection.findOne({ ueId });
+            if (doc) {
+              registrationDataSets.smsf3Gpp = stripInternalFields<SmsfRegistration>(doc as Record<string, any>);
             }
           }
           break;
@@ -195,9 +198,9 @@ router.get('/:ueId/registrations', async (req: Request, res: Response) => {
         case RegistrationDataSetName.SMSF_NON_3GPP:
           {
             const collection = await getCollection('smsfNon3GppRegistrations');
-            const registration = await collection.findOne({ ueId }) as SmsfRegistration | null;
-            if (registration) {
-              registrationDataSets.smsfNon3Gpp = registration;
+            const doc = await collection.findOne({ ueId });
+            if (doc) {
+              registrationDataSets.smsfNon3Gpp = stripInternalFields<SmsfRegistration>(doc as Record<string, any>);
             }
           }
           break;
@@ -205,9 +208,9 @@ router.get('/:ueId/registrations', async (req: Request, res: Response) => {
         case RegistrationDataSetName.IP_SM_GW:
           {
             const collection = await getCollection('ipSmGwRegistrations');
-            const registration = await collection.findOne({ ueId }) as IpSmGwRegistration | null;
-            if (registration) {
-              registrationDataSets.ipSmGw = registration;
+            const doc = await collection.findOne({ ueId });
+            if (doc) {
+              registrationDataSets.ipSmGw = stripInternalFields<IpSmGwRegistration>(doc as Record<string, any>);
             }
           }
           break;
@@ -215,10 +218,10 @@ router.get('/:ueId/registrations', async (req: Request, res: Response) => {
         case RegistrationDataSetName.NWDAF:
           {
             const collection = await getCollection('nwdafRegistrations');
-            const registrations = await collection.find({ ueId }).toArray();
-            if (registrations.length > 0) {
+            const docs = await collection.find({ ueId }).toArray();
+            if (docs.length > 0) {
               registrationDataSets.nwdafRegistration = {
-                nwdafRegistrationList: registrations as any[]
+                nwdafRegistrationList: docs.map(d => stripInternalFields<NwdafRegistration>(d as Record<string, any>))
               };
             }
           }
@@ -226,26 +229,14 @@ router.get('/:ueId/registrations', async (req: Request, res: Response) => {
       }
     }
 
-    const hasAnyData = Object.keys(registrationDataSets).length > 0;
-    if (!hasAnyData) {
-      return res.status(404).json({
-        type: 'urn:3gpp:error:application',
-        title: 'Not Found',
-        status: 404,
-        detail: 'No registration data found for the specified UE',
-        cause: 'CONTEXT_NOT_FOUND'
-      });
+    if (Object.keys(registrationDataSets).length === 0) {
+      return res.status(404).type('application/problem+json').json(createNotFoundError('No registration data found for the specified UE'));
     }
 
     return res.status(200).json(registrationDataSets);
   } catch (error) {
     logger.error('Error retrieving registration data', { error });
-    return res.status(500).json({
-      type: 'urn:3gpp:error:system',
-      title: 'Internal Server Error',
-      status: 500,
-      detail: 'An error occurred while retrieving registration data'
-    });
+    return res.status(500).type('application/problem+json').json(createInternalError('An error occurred while retrieving registration data'));
   }
 });
 

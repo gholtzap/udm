@@ -42,6 +42,7 @@ import {
   PlmnId,
   createNotImplementedError
 } from '../types/common-types';
+import { resolveGpsiToSupi } from '../db/sdm-db';
 import logger from '../utils/logger';
 
 const router = Router();
@@ -248,56 +249,57 @@ router.post('/:ueId/registrations/send-routing-info-sm', async (req: Request, re
   }
 
   const requestBody = req.body as RoutingInfoSmRequest;
-  
+
   if (!requestBody || typeof requestBody !== 'object') {
     return res.status(400).json(createInvalidParameterError('Invalid request body'));
   }
 
   try {
+    const supi = await resolveGpsiToSupi(ueId);
+    if (!supi) {
+      return res.status(404).json(createNotFoundError('Unable to resolve UE identity'));
+    }
+
     const smsf3GppCollection = await getCollection('smsf3GppRegistrations');
     const smsfNon3GppCollection = await getCollection('smsfNon3GppRegistrations');
     const ipSmGwCollection = await getCollection('ipSmGwRegistrations');
 
-    const smsf3Gpp = await smsf3GppCollection.findOne({ ueId }) as SmsfRegistration | null;
-    const smsfNon3Gpp = await smsfNon3GppCollection.findOne({ ueId }) as SmsfRegistration | null;
-    const ipSmGwReg = await ipSmGwCollection.findOne({ ueId }) as IpSmGwRegistration | null;
+    const smsf3GppDoc = await smsf3GppCollection.findOne({ ueId: supi });
+    const smsfNon3GppDoc = await smsfNon3GppCollection.findOne({ ueId: supi });
+    const ipSmGwDoc = await ipSmGwCollection.findOne({ ueId: supi });
 
-    if (!smsf3Gpp && !smsfNon3Gpp && !ipSmGwReg) {
-      return res.status(404).json({
-        type: 'urn:3gpp:error:application',
-        title: 'Not Found',
-        status: 404,
-        detail: 'No SMS routing information found for the specified UE',
-        cause: 'USER_NOT_FOUND'
-      });
+    if (!smsf3GppDoc && !smsfNon3GppDoc && !ipSmGwDoc) {
+      return res.status(404).json(createNotFoundError('No SMS routing information found for the specified UE'));
     }
 
-    const response: RoutingInfoSmResponse = {};
+    const response: RoutingInfoSmResponse = {
+      supi
+    };
 
-    if (smsf3Gpp) {
-      response.smsf3Gpp = smsf3Gpp;
+    if (smsf3GppDoc) {
+      response.smsf3Gpp = stripInternalFields<SmsfRegistration>(smsf3GppDoc as Record<string, any>);
     }
 
-    if (smsfNon3Gpp) {
-      response.smsfNon3Gpp = smsfNon3Gpp;
+    if (smsfNon3GppDoc) {
+      response.smsfNon3Gpp = stripInternalFields<SmsfRegistration>(smsfNon3GppDoc as Record<string, any>);
     }
 
-    if (ipSmGwReg && requestBody.ipSmGwInd !== false) {
+    if (ipSmGwDoc && requestBody.ipSmGwInd === true) {
+      const cleanReg = stripInternalFields<IpSmGwRegistration>(ipSmGwDoc as Record<string, any>);
       const ipSmGwInfo: IpSmGwInfo = {
-        ipSmGwRegistration: ipSmGwReg
+        ipSmGwRegistration: cleanReg
       };
+      const docAny = ipSmGwDoc as Record<string, any>;
+      if (docAny.ipSmGwGuidance) {
+        ipSmGwInfo.ipSmGwGuidance = docAny.ipSmGwGuidance;
+      }
       response.ipSmGw = ipSmGwInfo;
     }
 
     return res.status(200).json(response);
   } catch (error) {
     logger.error('Error retrieving SMS routing information', { error });
-    return res.status(500).json({
-      type: 'urn:3gpp:error:system',
-      title: 'Internal Server Error',
-      status: 500,
-      detail: 'An error occurred while retrieving SMS routing information'
-    });
+    return res.status(500).json(createInternalError('An error occurred while retrieving SMS routing information'));
   }
 });
 

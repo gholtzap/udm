@@ -147,6 +147,26 @@ export const getGroupIdentifiers = async (extGroupId?: string, intGroupId?: stri
   return doc?.data || null;
 };
 
+export const resolveGpsiToSupi = async (ueId: string): Promise<string | null> => {
+  if (ueId.startsWith('imsi-') || ueId.startsWith('nai-')) {
+    return ueId;
+  }
+
+  if (!ueId.startsWith('msisdn-') && !ueId.startsWith('extid-')) {
+    return null;
+  }
+
+  const map = await getAllSubscriptionData();
+  for (const [supi, data] of map.entries()) {
+    if (data.amData?.gpsis?.includes(ueId)) {
+      return supi;
+    }
+  }
+
+  const digits = ueId.replace(/^(msisdn-|extid-)/, '').replace(/[^0-9]/g, '');
+  return `imsi-${digits.slice(-15).padStart(15, '0')}`;
+};
+
 export const setGroupIdentifiers = async (extGroupId: string | undefined, intGroupId: string | undefined, data: GroupIdentifiers): Promise<void> => {
   const query: any = {};
   if (extGroupId) {

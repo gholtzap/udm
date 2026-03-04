@@ -40,6 +40,7 @@ import {
   PatchResult,
   AccessType,
   PlmnId,
+  RatType,
   createNotImplementedError
 } from '../types/common-types';
 import { resolveGpsiToSupi } from '../db/sdm-db';
@@ -324,8 +325,28 @@ router.put('/:ueId/registrations/amf-3gpp-access', async (req: Request, res: Res
     return res.status(400).json(createMissingParameterError('Missing required field: guami'));
   }
 
+  if (!registration.guami.plmnId) {
+    return res.status(400).json(createMissingParameterError('Missing required field: guami.plmnId'));
+  }
+
+  if (!registration.guami.plmnId.mcc) {
+    return res.status(400).json(createMissingParameterError('Missing required field: guami.plmnId.mcc'));
+  }
+
+  if (!registration.guami.plmnId.mnc) {
+    return res.status(400).json(createMissingParameterError('Missing required field: guami.plmnId.mnc'));
+  }
+
+  if (!registration.guami.amfId) {
+    return res.status(400).json(createMissingParameterError('Missing required field: guami.amfId'));
+  }
+
   if (!registration.ratType) {
     return res.status(400).json(createMissingParameterError('Missing required field: ratType'));
+  }
+
+  if (!Object.values(RatType).includes(registration.ratType)) {
+    return res.status(400).json(createInvalidParameterError('Invalid ratType value'));
   }
 
   try {
@@ -337,24 +358,21 @@ router.put('/:ueId/registrations/amf-3gpp-access', async (req: Request, res: Res
       ueId
     };
 
-    if (!existingReg) {
-      await collection.insertOne(registrationData);
+    const isSameAmf = existingReg && existingReg.amfInstanceId === registration.amfInstanceId;
+
+    await collection.replaceOne({ ueId }, registrationData, { upsert: true });
+
+    if (isSameAmf) {
+      return res.status(200).json(registration);
+    } else {
       const location = `${req.protocol}://${req.get('host')}/nudm-uecm/v1/${ueId}/registrations/amf-3gpp-access`;
       return res.status(201)
         .header('Location', location)
-        .json(registrationData);
-    } else {
-      await collection.replaceOne({ ueId }, registrationData);
-      return res.status(200).json(registrationData);
+        .json(registration);
     }
   } catch (error) {
     logger.error('Error creating/updating AMF 3GPP registration', { error });
-    return res.status(500).json({
-      type: 'urn:3gpp:error:system',
-      title: 'Internal Server Error',
-      status: 500,
-      detail: 'An error occurred while creating/updating AMF 3GPP registration'
-    });
+    return res.status(500).json(createInternalError('An error occurred while creating/updating AMF 3GPP registration'));
   }
 });
 

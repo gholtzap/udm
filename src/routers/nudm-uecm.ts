@@ -459,11 +459,9 @@ router.patch('/:ueId/registrations/amf-3gpp-access', async (req: Request, res: R
 router.get('/:ueId/registrations/amf-3gpp-access', async (req: Request, res: Response) => {
   const { ueId } = req.params;
 
-  if (!validateUeIdentity(ueId, ['imsi', 'nai', 'msisdn', 'extid'], true)) {
+  if (!validateUeIdentity(ueId, ['imsi', 'nai', 'gli', 'gci'], true)) {
     return res.status(400).json(createInvalidParameterError('Invalid ueId format'));
   }
-
-  const supportedFeatures = req.query['supported-features'] as string | undefined;
 
   try {
     const collection = await getCollection('amf3GppRegistrations');
@@ -479,7 +477,7 @@ router.get('/:ueId/registrations/amf-3gpp-access', async (req: Request, res: Res
       });
     }
 
-    return res.status(200).json(registration);
+    return res.status(200).json(stripInternalFields<Amf3GppAccessRegistration>(registration as any));
   } catch (error) {
     logger.error('Error retrieving AMF 3GPP registration', { error });
     return res.status(500).json({

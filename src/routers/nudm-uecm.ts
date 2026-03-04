@@ -383,17 +383,39 @@ router.patch('/:ueId/registrations/amf-3gpp-access', async (req: Request, res: R
     return res.status(400).json(createInvalidParameterError('Invalid ueId format'));
   }
 
-  const modification = req.body as Amf3GppAccessRegistrationModification;
+  const body = req.body;
 
-  if (!modification.guami) {
+  if (!body || !body.guami) {
     return res.status(400).json(createMissingParameterError('Missing required field: guami'));
   }
 
-  const supportedFeatures = req.query['supported-features'] as string | undefined;
+  if (!body.guami.plmnId) {
+    return res.status(400).json(createMissingParameterError('Missing required field: guami.plmnId'));
+  }
+
+  if (!body.guami.plmnId.mcc) {
+    return res.status(400).json(createMissingParameterError('Missing required field: guami.plmnId.mcc'));
+  }
+
+  if (!body.guami.plmnId.mnc) {
+    return res.status(400).json(createMissingParameterError('Missing required field: guami.plmnId.mnc'));
+  }
+
+  if (!body.guami.amfId) {
+    return res.status(400).json(createMissingParameterError('Missing required field: guami.amfId'));
+  }
+
+  const allowedFields = ['guami', 'purgeFlag', 'pei', 'imsVoPs', 'backupAmfInfo', 'epsInterworkingInfo', 'ueSrvccCapability', 'ueMINTCapability'];
+  const modification: Partial<Amf3GppAccessRegistrationModification> = {};
+  for (const field of allowedFields) {
+    if (field in body) {
+      (modification as any)[field] = body[field];
+    }
+  }
 
   try {
     const collection = await getCollection('amf3GppRegistrations');
-    const existingReg = await collection.findOne({ ueId }) as Amf3GppAccessRegistration | null;
+    const existingReg = await collection.findOne({ ueId }) as (Amf3GppAccessRegistration & { _id?: any, ueId?: string }) | null;
 
     if (!existingReg) {
       return res.status(404).json({
@@ -405,19 +427,32 @@ router.patch('/:ueId/registrations/amf-3gpp-access', async (req: Request, res: R
       });
     }
 
-    const updatedReg = deepMerge(existingReg, modification);
+    const storedGuami = existingReg.guami;
+    const incomingGuami = modification.guami!;
+    if (
+      storedGuami.plmnId.mcc !== incomingGuami.plmnId.mcc ||
+      storedGuami.plmnId.mnc !== incomingGuami.plmnId.mnc ||
+      storedGuami.amfId !== incomingGuami.amfId
+    ) {
+      return res.status(403).json({
+        type: 'urn:3gpp:error:application',
+        title: 'Forbidden',
+        status: 403,
+        detail: 'GUAMI mismatch with existing registration',
+        cause: 'SERVING_NF_NOT_REGISTERED'
+      });
+    }
+
+    const { _id, ueId: storedUeId, ...cleanReg } = existingReg;
+    const updatedReg = deepMerge(cleanReg, modification);
+    updatedReg.ueId = storedUeId;
 
     await collection.replaceOne({ ueId }, updatedReg);
 
     return res.status(204).send();
   } catch (error) {
     logger.error('Error updating AMF 3GPP registration', { error });
-    return res.status(500).json({
-      type: 'urn:3gpp:error:system',
-      title: 'Internal Server Error',
-      status: 500,
-      detail: 'An error occurred while updating AMF 3GPP registration'
-    });
+    return res.status(500).json(createInternalError('An error occurred while updating AMF 3GPP registration'));
   }
 });
 

@@ -1,35 +1,23 @@
 import { MongoClient, Db, Collection, Document } from 'mongodb';
 
-const validateEnvironmentVariables = (): { uri: string; dbName: string; collectionName: string } => {
-  const uri = process.env.MONGODB_URI;
-  const dbName = process.env.MONGODB_DB_NAME;
-  const collectionName = process.env.MONGODB_COLLECTION_NAME;
-
-  if (!uri) {
-    throw new Error('MONGODB_URI environment variable is not set');
-  }
-
-  if (!dbName) {
-    throw new Error('MONGODB_DB_NAME environment variable is not set');
-  }
-
-  if (!collectionName) {
-    throw new Error('MONGODB_COLLECTION_NAME environment variable is not set');
-  }
-
-  return { uri, dbName, collectionName };
-};
-
-const { uri: MONGODB_URI, dbName: DB_NAME, collectionName: COLLECTION_NAME } = validateEnvironmentVariables();
-
 let db: Db;
 let client: MongoClient;
 
+function getEnvOrThrow(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`${name} environment variable is not set`);
+  }
+  return value;
+}
+
 export const initializeMongoDB = async (): Promise<void> => {
   try {
-    client = new MongoClient(MONGODB_URI);
+    const uri = getEnvOrThrow('MONGODB_URI');
+    const dbName = getEnvOrThrow('MONGODB_DB_NAME');
+    client = new MongoClient(uri);
     await client.connect();
-    db = client.db(DB_NAME);
+    db = client.db(dbName);
   } catch (error) {
     if (error instanceof Error) {
       throw new Error(`Failed to connect to MongoDB: ${error.message}`);
@@ -46,7 +34,7 @@ export const getDatabase = (): Db => {
 };
 
 export const getCollection = <T extends Document = Document>(collectionName?: string): Collection<T> => {
-  const name = collectionName || COLLECTION_NAME;
+  const name = collectionName || getEnvOrThrow('MONGODB_COLLECTION_NAME');
   return getDatabase().collection<T>(name);
 };
 

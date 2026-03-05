@@ -681,7 +681,7 @@ router.post('/:ueId/registrations/amf-3gpp-access/roaming-info-update', async (r
 
   const roamingInfoUpdate = req.body as RoamingInfoUpdate;
 
-  if (!roamingInfoUpdate || typeof roamingInfoUpdate !== 'object') {
+  if (!roamingInfoUpdate || typeof roamingInfoUpdate !== 'object' || Array.isArray(roamingInfoUpdate)) {
     return res.status(400).json(createInvalidParameterError('Invalid request body'));
   }
 
@@ -693,18 +693,20 @@ router.post('/:ueId/registrations/amf-3gpp-access/roaming-info-update', async (r
     return res.status(400).json(createInvalidParameterError('servingPlmn must contain mcc and mnc'));
   }
 
+  if (!/^\d{3}$/.test(roamingInfoUpdate.servingPlmn.mcc) || !/^\d{2,3}$/.test(roamingInfoUpdate.servingPlmn.mnc)) {
+    return res.status(400).json(createInvalidParameterError('mcc must be 3 digits and mnc must be 2-3 digits'));
+  }
+
+  if (roamingInfoUpdate.roaming !== undefined && typeof roamingInfoUpdate.roaming !== 'boolean') {
+    return res.status(400).json(createInvalidParameterError('roaming must be a boolean'));
+  }
+
   try {
     const collection = await getCollection('amf3GppRegistrations');
     const existingReg = await collection.findOne({ ueId }) as Amf3GppAccessRegistrationWithRoaming | null;
 
     if (!existingReg) {
-      return res.status(404).json({
-        type: 'urn:3gpp:error:application',
-        title: 'Not Found',
-        status: 404,
-        detail: 'AMF 3GPP registration context not found',
-        cause: 'USER_NOT_FOUND'
-      });
+      return res.status(404).json(createNotFoundError('AMF 3GPP registration context not found'));
     }
 
     const hasExistingRoamingInfo = existingReg.servingPlmn !== undefined;
@@ -732,12 +734,7 @@ router.post('/:ueId/registrations/amf-3gpp-access/roaming-info-update', async (r
     }
   } catch (error) {
     logger.error('Error updating roaming information in AMF 3GPP registration', { error });
-    return res.status(500).json({
-      type: 'urn:3gpp:error:system',
-      title: 'Internal Server Error',
-      status: 500,
-      detail: 'An error occurred while updating roaming information'
-    });
+    return res.status(500).json(createInternalError('An error occurred while updating roaming information'));
   }
 });
 

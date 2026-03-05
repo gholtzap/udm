@@ -20,6 +20,7 @@ import {
   RoutingInfoSmResponse,
   IpSmGwInfo,
   AmfDeregInfo,
+  DeregistrationData,
   PeiUpdateInfo,
   RoamingInfoUpdate,
   TriggerRequest,
@@ -502,7 +503,7 @@ router.post('/:ueId/registrations/amf-3gpp-access/dereg-amf', async (req: Reques
     return res.status(400).json(createInvalidParameterError('Invalid request body'));
   }
 
-  if (!deregInfo.deregReason) {
+  if (!deregInfo.deregReason || typeof deregInfo.deregReason !== 'string') {
     return res.status(400).json(createMissingParameterError('Missing required field: deregReason'));
   }
 
@@ -520,17 +521,44 @@ router.post('/:ueId/registrations/amf-3gpp-access/dereg-amf', async (req: Reques
       });
     }
 
-    await collection.deleteOne({ ueId });
+    const { deregCallbackUri } = existingReg as unknown as Amf3GppAccessRegistration;
+
+    if (!deregCallbackUri) {
+      logger.error('No deregCallbackUri in AMF 3GPP registration', { ueId });
+      return res.status(500).json(createInternalError('No deregCallbackUri stored for this registration'));
+    }
+
+    const deregData: DeregistrationData = {
+      deregReason: deregInfo.deregReason,
+      accessType: AccessType.THREE_GPP_ACCESS
+    };
+
+    try {
+      const callbackResponse = await fetch(deregCallbackUri, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(deregData)
+      });
+
+      if (!callbackResponse.ok) {
+        logger.warn('AMF deregistration callback returned non-success', {
+          ueId,
+          uri: deregCallbackUri,
+          status: callbackResponse.status
+        });
+      }
+    } catch (callbackError) {
+      logger.error('Failed to send deregistration callback to AMF', {
+        ueId,
+        uri: deregCallbackUri,
+        error: callbackError
+      });
+    }
 
     return res.status(204).send();
   } catch (error) {
-    logger.error('Error deregistering AMF 3GPP access', { error });
-    return res.status(500).json({
-      type: 'urn:3gpp:error:system',
-      title: 'Internal Server Error',
-      status: 500,
-      detail: 'An error occurred while deregistering AMF 3GPP access'
-    });
+    logger.error('Error triggering AMF deregistration', { error });
+    return res.status(500).json(createInternalError('An error occurred while triggering AMF deregistration'));
   }
 });
 

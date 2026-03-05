@@ -575,40 +575,102 @@ router.post('/:ueId/registrations/amf-3gpp-access/pei-update', async (req: Reque
     return res.status(400).json(createInvalidParameterError('Invalid request body'));
   }
 
-  if (!peiUpdateInfo.pei) {
+  if (!peiUpdateInfo.pei || typeof peiUpdateInfo.pei !== 'string') {
     return res.status(400).json(createMissingParameterError('Missing required field: pei'));
   }
 
   try {
     const collection = await getCollection('amf3GppRegistrations');
-    const existingReg = await collection.findOne({ ueId }) as Amf3GppAccessRegistration | null;
+    const existingReg = await collection.findOne({ ueId }) as (Amf3GppAccessRegistration & { ueId?: string }) | null;
 
     if (!existingReg) {
-      return res.status(404).json({
-        type: 'urn:3gpp:error:application',
-        title: 'Not Found',
-        status: 404,
-        detail: 'AMF 3GPP registration context not found',
-        cause: 'USER_NOT_FOUND'
-      });
+      return res.status(404).json(createNotFoundError('AMF 3GPP registration context not found'));
     }
+
+    const incomingGuami = req.headers['x-guami'] ? JSON.parse(req.headers['x-guami'] as string) : null;
+    if (incomingGuami) {
+      const storedGuami = existingReg.guami;
+      if (
+        storedGuami.plmnId.mcc !== incomingGuami.plmnId?.mcc ||
+        storedGuami.plmnId.mnc !== incomingGuami.plmnId?.mnc ||
+        storedGuami.amfId !== incomingGuami.amfId
+      ) {
+        return res.status(403).json({
+          type: 'urn:3gpp:error:application',
+          title: 'Forbidden',
+          status: 403,
+          detail: 'GUAMI mismatch with existing registration',
+          cause: 'SERVING_NF_NOT_REGISTERED'
+        });
+      }
+    }
+
+    const oldPei = existingReg.pei;
 
     await collection.updateOne(
       { ueId },
       { $set: { pei: peiUpdateInfo.pei } }
     );
 
+    if (oldPei !== peiUpdateInfo.pei) {
+      notifyPeiChange(ueId, peiUpdateInfo.pei).catch(err => {
+        logger.error('Failed to send PEI change notifications', { ueId, error: err });
+      });
+    }
+
     return res.status(204).send();
   } catch (error) {
     logger.error('Error updating PEI in AMF 3GPP registration', { error });
-    return res.status(500).json({
-      type: 'urn:3gpp:error:system',
-      title: 'Internal Server Error',
-      status: 500,
-      detail: 'An error occurred while updating PEI'
-    });
+    return res.status(500).json(createInternalError('An error occurred while updating PEI'));
   }
 });
+
+async function notifyPeiChange(ueId: string, newPei: string): Promise<void> {
+  const eeCollection = await getCollection('ee-subscriptions');
+  const subscriptions = await eeCollection.find({
+    ueIdentity: ueId,
+    [`monitoringConfigurations`]: { $exists: true }
+  }).toArray();
+
+  for (const sub of subscriptions) {
+    const configs = (sub as any).monitoringConfigurations as Record<string, any>;
+    if (!configs) continue;
+
+    for (const [refId, config] of Object.entries(configs)) {
+      if (config.eventType !== 'CHANGE_OF_SUPI_PEI_ASSOCIATION') continue;
+
+      const callbackUri = (sub as any).callbackReference;
+      if (!callbackUri) continue;
+
+      const report = {
+        eventNotifs: [{
+          event: 'CHANGE_OF_SUPI_PEI_ASSOCIATION',
+          referenceId: parseInt(refId) || 0,
+          eventType: 'CHANGE_OF_SUPI_PEI_ASSOCIATION',
+          timeStamp: new Date().toISOString(),
+          report: { newPei }
+        }]
+      };
+
+      try {
+        const response = await fetch(callbackUri, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(report)
+        });
+        if (!response.ok) {
+          logger.warn('EE notification callback returned non-success', {
+            ueId, uri: callbackUri, status: response.status
+          });
+        }
+      } catch (err) {
+        logger.error('Failed to send EE notification callback', {
+          ueId, uri: callbackUri, error: err
+        });
+      }
+    }
+  }
+}
 
 router.post('/:ueId/registrations/amf-3gpp-access/roaming-info-update', async (req: Request, res: Response) => {
   const { ueId } = req.params;

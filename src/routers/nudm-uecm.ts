@@ -1322,24 +1322,24 @@ router.put('/:ueId/registrations/smsf-3gpp-access', async (req: Request, res: Re
       ueId
     };
 
+    const etag = `"${ueId}-smsf3gpp-${Date.now()}"`;
+
     if (!existingReg) {
       await collection.insertOne(registrationData);
       const location = `${req.protocol}://${req.get('host')}/nudm-uecm/v1/${ueId}/registrations/smsf-3gpp-access`;
       return res.status(201)
         .header('Location', location)
-        .json(registrationData);
+        .header('ETag', etag)
+        .json(registration);
     } else {
       await collection.replaceOne({ ueId }, registrationData);
-      return res.status(200).json(registrationData);
+      return res.status(200)
+        .header('ETag', etag)
+        .json(registration);
     }
   } catch (error) {
     logger.error('Error creating/updating SMSF 3GPP registration', { error });
-    return res.status(500).json({
-      type: 'urn:3gpp:error:system',
-      title: 'Internal Server Error',
-      status: 500,
-      detail: 'An error occurred while creating/updating SMSF 3GPP registration'
-    });
+    return res.status(500).json(createInternalError('An error occurred while creating/updating SMSF 3GPP registration'));
   }
 });
 

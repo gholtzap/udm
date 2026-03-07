@@ -26,6 +26,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '10mb', type: 'application/merge-patch+json' }));
 app.use(timeoutMiddleware(30000));
 app.use(correlationIdMiddleware);
 app.use(requestLoggerMiddleware);

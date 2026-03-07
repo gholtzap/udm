@@ -1148,61 +1148,58 @@ router.put('/:ueId/registrations/smf-registrations/:pduSessionId', async (req: R
 router.delete('/:ueId/registrations/smf-registrations/:pduSessionId', async (req: Request, res: Response) => {
   const { ueId, pduSessionId } = req.params;
 
-  if (!validateUeIdentity(ueId, ['imsi', 'nai', 'gli', 'gci'], true)) {
-    return res.status(400).json(createInvalidParameterError('Invalid ueId format'));
+  if (!validateUeIdentity(ueId, ['imsi', 'nai'], true)) {
+    return res.status(400).contentType('application/problem+json').json(createInvalidParameterError('Invalid ueId format'));
   }
 
   const pduSessionIdNum = parseInt(pduSessionId, 10);
   if (isNaN(pduSessionIdNum) || pduSessionIdNum < 1 || pduSessionIdNum > 255) {
-    return res.status(400).json(createInvalidParameterError('Invalid pduSessionId'));
+    return res.status(400).contentType('application/problem+json').json(createInvalidParameterError('Invalid pduSessionId'));
   }
 
   const smfSetId = req.query['smf-set-id'] as string | undefined;
   const smfInstanceId = req.query['smf-instance-id'] as string | undefined;
+  const smfEventsImplicitlyUnsubscribed = req.query['smf-events-implicitly-unsubscribed'] === 'true';
 
   try {
     const collection = await getCollection('smfRegistrations');
     const existingReg = await collection.findOne({ ueId, pduSessionId: pduSessionIdNum }) as SmfRegistration | null;
 
     if (!existingReg) {
-      return res.status(404).json({
-        type: 'urn:3gpp:error:application',
-        title: 'Not Found',
-        status: 404,
-        detail: 'SMF registration context not found',
-        cause: 'CONTEXT_NOT_FOUND'
-      });
+      return res.status(404).contentType('application/problem+json').json(createNotFoundError('SMF registration context not found'));
     }
 
     if (smfSetId && existingReg.smfSetId !== smfSetId) {
-      return res.status(422).json({
-        type: 'urn:3gpp:error:application',
+      return res.status(422).contentType('application/problem+json').json({
+        type: 'urn:3gpp:error:invalid-parameter',
         title: 'Unprocessable Request',
         status: 422,
-        detail: 'SMF Set ID does not match the registered SMF Set ID'
+        detail: 'SMF Set ID does not match the registered SMF Set ID',
+        cause: 'SMF_SET_ID_MISMATCH'
       });
     }
 
     if (!smfSetId && smfInstanceId && existingReg.smfInstanceId !== smfInstanceId) {
-      return res.status(422).json({
-        type: 'urn:3gpp:error:application',
+      return res.status(422).contentType('application/problem+json').json({
+        type: 'urn:3gpp:error:invalid-parameter',
         title: 'Unprocessable Request',
         status: 422,
-        detail: 'SMF Instance ID does not match the registered SMF Instance ID'
+        detail: 'SMF Instance ID does not match the registered SMF Instance ID',
+        cause: 'SMF_INSTANCE_ID_MISMATCH'
       });
     }
 
     await collection.deleteOne({ ueId, pduSessionId: pduSessionIdNum });
 
+    if (!smfEventsImplicitlyUnsubscribed) {
+      const sdmCollection = await getCollection('sdmSubscriptions');
+      await sdmCollection.deleteMany({ ueId, pduSessionId: pduSessionIdNum });
+    }
+
     return res.status(204).send();
   } catch (error) {
     logger.error('Error deleting SMF registration', { error });
-    return res.status(500).json({
-      type: 'urn:3gpp:error:system',
-      title: 'Internal Server Error',
-      status: 500,
-      detail: 'An error occurred while deleting SMF registration'
-    });
+    return res.status(500).contentType('application/problem+json').json(createInternalError('An error occurred while deleting SMF registration'));
   }
 });
 

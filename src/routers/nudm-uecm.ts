@@ -464,6 +464,8 @@ router.get('/:ueId/registrations/amf-3gpp-access', async (req: Request, res: Res
     return res.status(400).json(createInvalidParameterError('Invalid ueId format'));
   }
 
+  const supportedFeatures = req.query['supported-features'] as string | undefined;
+
   try {
     const collection = await getCollection('amf3GppRegistrations');
     const registration = await collection.findOne({ ueId }) as Amf3GppAccessRegistration | null;
@@ -478,7 +480,12 @@ router.get('/:ueId/registrations/amf-3gpp-access', async (req: Request, res: Res
       });
     }
 
-    return res.status(200).json(stripInternalFields<Amf3GppAccessRegistration>(registration as any));
+    const response = stripInternalFields<Amf3GppAccessRegistration>(registration as any);
+    if (supportedFeatures) {
+      response.supportedFeatures = supportedFeatures;
+    }
+
+    return res.status(200).json(response);
   } catch (error) {
     logger.error('Error retrieving AMF 3GPP registration', { error });
     return res.status(500).json({
@@ -864,8 +871,6 @@ router.patch('/:ueId/registrations/amf-non-3gpp-access', async (req: Request, re
     }
   }
 
-  const supportedFeatures = req.query['supported-features'] as string | undefined;
-
   try {
     const collection = await getCollection('amfNon3GppRegistrations');
     const existingReg = await collection.findOne({ ueId }) as (AmfNon3GppAccessRegistration & { _id?: any, ueId?: string }) | null;
@@ -900,10 +905,6 @@ router.patch('/:ueId/registrations/amf-non-3gpp-access', async (req: Request, re
     const updatedReg = deepMerge(cleanReg, modification);
     updatedReg.ueId = storedUeId;
 
-    if (supportedFeatures) {
-      updatedReg.supportedFeatures = supportedFeatures;
-    }
-
     await collection.replaceOne({ ueId }, updatedReg);
 
     if (rejectedFields.length > 0) {
@@ -931,6 +932,8 @@ router.get('/:ueId/registrations/amf-non-3gpp-access', async (req: Request, res:
     return res.status(400).json(createInvalidParameterError('Invalid ueId format'));
   }
 
+  const supportedFeatures = req.query['supported-features'] as string | undefined;
+
   try {
     const collection = await getCollection('amfNon3GppRegistrations');
     const registration = await collection.findOne({ ueId }) as AmfNon3GppAccessRegistration | null;
@@ -945,7 +948,12 @@ router.get('/:ueId/registrations/amf-non-3gpp-access', async (req: Request, res:
       });
     }
 
-    return res.status(200).json(stripInternalFields<AmfNon3GppAccessRegistration>(registration as any));
+    const response = stripInternalFields<AmfNon3GppAccessRegistration>(registration as any);
+    if (supportedFeatures) {
+      response.supportedFeatures = supportedFeatures;
+    }
+
+    return res.status(200).json(response);
   } catch (error) {
     logger.error('Error retrieving AMF non-3GPP registration', { error });
     return res.status(500).json({
@@ -963,8 +971,6 @@ router.get('/:ueId/registrations/smf-registrations', async (req: Request, res: R
   if (!validateUeIdentity(ueId, ['imsi', 'nai', 'msisdn', 'extid'], true)) {
     return res.status(400).json(createInvalidParameterError('Invalid ueId format'));
   }
-
-  const supportedFeatures = req.query['supported-features'] as string | undefined;
 
   let singleNssai: Snssai | undefined;
   const singleNssaiParam = req.query['single-nssai'];
@@ -1211,8 +1217,6 @@ router.patch('/:ueId/registrations/smf-registrations/:pduSessionId', async (req:
     return res.status(400).json(createMissingParameterError('Missing required field: smfInstanceId'));
   }
 
-  const supportedFeatures = req.query['supported-features'] as string | undefined;
-
   try {
     const collection = await getCollection('smfRegistrations');
     const existingReg = await collection.findOne({ ueId, pduSessionId: pduSessionIdNum }) as SmfRegistration | null;
@@ -1363,7 +1367,12 @@ router.get('/:ueId/registrations/smsf-3gpp-access', async (req: Request, res: Re
       });
     }
 
-    return res.status(200).json(registration);
+    const response = stripInternalFields<SmsfRegistration>(registration as any);
+    if (supportedFeatures) {
+      response.supportedFeatures = supportedFeatures;
+    }
+
+    return res.status(200).json(response);
   } catch (error) {
     logger.error('Error retrieving SMSF 3GPP registration', { error });
     return res.status(500).json({
@@ -1387,8 +1396,6 @@ router.patch('/:ueId/registrations/smsf-3gpp-access', async (req: Request, res: 
   if (!modification.smsfInstanceId) {
     return res.status(400).json(createMissingParameterError('Missing required field: smsfInstanceId'));
   }
-
-  const supportedFeatures = req.query['supported-features'] as string | undefined;
 
   try {
     const collection = await getCollection('smsf3GppRegistrations');
@@ -1540,7 +1547,12 @@ router.get('/:ueId/registrations/smsf-non-3gpp-access', async (req: Request, res
       });
     }
 
-    return res.status(200).json(registration);
+    const response = stripInternalFields<SmsfRegistration>(registration as any);
+    if (supportedFeatures) {
+      response.supportedFeatures = supportedFeatures;
+    }
+
+    return res.status(200).json(response);
   } catch (error) {
     logger.error('Error retrieving SMSF non-3GPP registration', { error });
     return res.status(500).json({
@@ -1564,8 +1576,6 @@ router.patch('/:ueId/registrations/smsf-non-3gpp-access', async (req: Request, r
   if (!modification.smsfInstanceId) {
     return res.status(400).json(createMissingParameterError('Missing required field: smsfInstanceId'));
   }
-
-  const supportedFeatures = req.query['supported-features'] as string | undefined;
 
   try {
     const collection = await getCollection('smsfNon3GppRegistrations');
@@ -1914,7 +1924,6 @@ router.get('/:ueId/registrations/nwdaf-registrations', async (req: Request, res:
   }
 
   const analyticsIds = req.query['analytics-ids'] as string | string[] | undefined;
-  const supportedFeatures = req.query['supported-features'] as string | undefined;
 
   try {
     const collection = await getCollection('nwdafRegistrations');
@@ -2046,8 +2055,6 @@ router.patch('/:ueId/registrations/nwdaf-registrations/:nwdafRegistrationId', as
   if (!modification.nwdafInstanceId) {
     return res.status(400).json(createMissingParameterError('Missing required field: nwdafInstanceId'));
   }
-
-  const supportedFeatures = req.query['supported-features'] as string | undefined;
 
   try {
     const collection = await getCollection('nwdafRegistrations');

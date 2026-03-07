@@ -76,7 +76,6 @@ router.patch('/:ueId/pp-data', (req: Request, res: Response) => {
   const { ueId } = req.params;
   const afInstanceId = req.query['af-instance-id'];
   const mtcProviderInformation = req.query['mtc-provider-information'];
-  const supportedFeatures = req.query['supported-features'];
   const body = req.body;
 
   if (!validateUeIdentity(ueId, ['msisdn', 'extid', 'imsi', 'nai', 'gci', 'gli', 'extgroupid'])) {
@@ -170,7 +169,6 @@ router.delete('/5g-vn-groups/:extGroupId', (req: Request, res: Response) => {
 
 router.patch('/5g-vn-groups/:extGroupId', (req: Request, res: Response) => {
   const { extGroupId } = req.params;
-  const supportedFeatures = req.query['supported-features'];
   const body = req.body;
 
   if (!extGroupIdPattern.test(extGroupId)) {
@@ -328,7 +326,6 @@ router.delete('/mbs-group-membership/:extGroupId', (req: Request, res: Response)
 
 router.patch('/mbs-group-membership/:extGroupId', (req: Request, res: Response) => {
   const { extGroupId } = req.params;
-  const supportedFeatures = req.query['supported-features'];
   const body = req.body;
 
   if (!extGroupIdPattern.test(extGroupId)) {

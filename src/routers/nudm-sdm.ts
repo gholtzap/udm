@@ -94,8 +94,6 @@ router.get('/:supi', async (req: Request, res: Response) => {
   const dnn = req.query['dnn'] as string | undefined;
   const ucPurpose = req.query['uc-purpose'] as string | undefined;
   const disasterRoamingInd = req.query['disaster-roaming-ind'] === 'true';
-  const supportedFeatures = req.query['supported-features'] as string | undefined;
-
   if (!validateUeIdentity(supi, ['imsi', 'nai', 'gci', 'gli'])) {
     return res.status(400).json(createInvalidParameterError('Invalid supi format'));
   }
@@ -277,8 +275,6 @@ router.get('/:supi/nssai', async (req: Request, res: Response) => {
 
 router.get('/:supi/ue-context-in-amf-data', async (req: Request, res: Response) => {
   const { supi } = req.params;
-  const supportedFeatures = req.query['supported-features'] as string | undefined;
-
   if (!validateUeIdentity(supi, ['imsi', 'nai', 'gci', 'gli'])) {
     return res.status(400).json(createInvalidParameterError('Invalid supi format'));
   }
@@ -451,7 +447,6 @@ router.get('/:supi/am-data', async (req: Request, res: Response) => {
 
 router.get('/:supi/am-data/ecr-data', async (req: Request, res: Response) => {
   const { supi } = req.params;
-  const supportedFeatures = req.query['supported-features'] as string | undefined;
   const ifNoneMatch = req.headers['if-none-match'] as string | undefined;
   const ifModifiedSince = req.headers['if-modified-since'] as string | undefined;
 
@@ -601,7 +596,6 @@ router.get('/:supi/smf-select-data', async (req: Request, res: Response) => {
 
 router.get('/:supi/ue-context-in-smf-data', async (req: Request, res: Response) => {
   const { supi } = req.params;
-  const supportedFeatures = req.query['supported-features'] as string | undefined;
   const plmnIdParam = req.query['plmn-id'] as string | undefined;
 
   if (!validateUeIdentity(supi, ['imsi', 'nai', 'gci', 'gli'])) {
@@ -695,8 +689,6 @@ router.get('/:supi/ue-context-in-smf-data', async (req: Request, res: Response) 
 
 router.get('/:supi/ue-context-in-smsf-data', async (req: Request, res: Response) => {
   const { supi } = req.params;
-  const supportedFeatures = req.query['supported-features'] as string | undefined;
-
   if (!validateUeIdentity(supi, ['imsi', 'nai', 'gci', 'gli'])) {
     return res.status(400).json(createInvalidParameterError('Invalid supi format'));
   }
@@ -771,7 +763,6 @@ router.get('/:supi/ue-context-in-smsf-data', async (req: Request, res: Response)
 
 router.get('/:supi/trace-data', async (req: Request, res: Response) => {
   const { supi } = req.params;
-  const supportedFeatures = req.query['supported-features'] as string | undefined;
   const plmnIdParam = req.query['plmn-id'] as string | undefined;
   const ifNoneMatch = req.headers['if-none-match'] as string | undefined;
   const ifModifiedSince = req.headers['if-modified-since'] as string | undefined;
@@ -862,7 +853,6 @@ router.get('/:supi/trace-data', async (req: Request, res: Response) => {
 
 router.get('/:supi/sm-data', async (req: Request, res: Response) => {
   const { supi } = req.params;
-  const supportedFeatures = req.query['supported-features'] as string | undefined;
   const singleNssaiParam = req.query['single-nssai'] as string | undefined;
   const dnn = req.query['dnn'] as string | undefined;
   const plmnIdParam = req.query['plmn-id'] as string | undefined;
@@ -1232,7 +1222,6 @@ router.get('/:supi/sms-mng-data', async (req: Request, res: Response) => {
 
 router.get('/:ueId/lcs-privacy-data', async (req: Request, res: Response) => {
   const { ueId } = req.params;
-  const supportedFeatures = req.query['supported-features'] as string | undefined;
   const ifNoneMatch = req.headers['if-none-match'] as string | undefined;
   const ifModifiedSince = req.headers['if-modified-since'] as string | undefined;
 
@@ -1324,7 +1313,6 @@ router.get('/:ueId/lcs-privacy-data', async (req: Request, res: Response) => {
 
 router.get('/:supi/lcs-mo-data', async (req: Request, res: Response) => {
   const { supi } = req.params;
-  const supportedFeatures = req.query['supported-features'] as string | undefined;
   const ifNoneMatch = req.headers['if-none-match'] as string | undefined;
   const ifModifiedSince = req.headers['if-modified-since'] as string | undefined;
 
@@ -1401,7 +1389,6 @@ router.get('/:supi/lcs-mo-data', async (req: Request, res: Response) => {
 
 router.get('/:supi/lcs-bca-data', async (req: Request, res: Response) => {
   const { supi } = req.params;
-  const supportedFeatures = req.query['supported-features'] as string | undefined;
   const plmnId = req.query['plmn-id'] as string | undefined;
   const ifNoneMatch = req.headers['if-none-match'] as string | undefined;
   const ifModifiedSince = req.headers['if-modified-since'] as string | undefined;
@@ -1473,7 +1460,6 @@ router.get('/:supi/lcs-bca-data', async (req: Request, res: Response) => {
 
 router.get('/:supi/lcs-subscription-data', async (req: Request, res: Response) => {
   const { supi } = req.params;
-  const supportedFeatures = req.query['supported-features'] as string | undefined;
   const ifNoneMatch = req.headers['if-none-match'] as string | undefined;
   const ifModifiedSince = req.headers['if-modified-since'] as string | undefined;
 
@@ -1547,7 +1533,6 @@ router.get('/:supi/lcs-subscription-data', async (req: Request, res: Response) =
 
 router.get('/:supi/v2x-data', async (req: Request, res: Response) => {
   const { supi } = req.params;
-  const supportedFeatures = req.query['supported-features'] as string | undefined;
   const ifNoneMatch = req.headers['if-none-match'] as string | undefined;
   const ifModifiedSince = req.headers['if-modified-since'] as string | undefined;
 
@@ -1635,7 +1620,6 @@ router.get('/:supi/v2x-data', async (req: Request, res: Response) => {
 
 router.get('/:supi/prose-data', async (req: Request, res: Response) => {
   const { supi } = req.params;
-  const supportedFeatures = req.query['supported-features'] as string | undefined;
   const ifNoneMatch = req.headers['if-none-match'] as string | undefined;
   const ifModifiedSince = req.headers['if-modified-since'] as string | undefined;
 
@@ -1721,7 +1705,6 @@ router.get('/:supi/prose-data', async (req: Request, res: Response) => {
 
 router.get('/:supi/5mbs-data', async (req: Request, res: Response) => {
   const { supi } = req.params;
-  const supportedFeatures = req.query['supported-features'] as string | undefined;
   const ifNoneMatch = req.headers['if-none-match'] as string | undefined;
   const ifModifiedSince = req.headers['if-modified-since'] as string | undefined;
 
@@ -1796,7 +1779,6 @@ router.get('/:supi/5mbs-data', async (req: Request, res: Response) => {
 
 router.get('/:supi/uc-data', async (req: Request, res: Response) => {
   const { supi } = req.params;
-  const supportedFeatures = req.query['supported-features'] as string | undefined;
   const ucPurposeParam = req.query['uc-purpose'] as string | undefined;
   const ifNoneMatch = req.headers['if-none-match'] as string | undefined;
   const ifModifiedSince = req.headers['if-modified-since'] as string | undefined;
@@ -2271,7 +2253,6 @@ router.post('/:supi/am-data/update-sor', async (req: Request, res: Response) => 
 
 router.get('/shared-data', async (req: Request, res: Response) => {
   const sharedDataIdsParam = req.query['shared-data-ids'] as string | undefined;
-  const supportedFeatures = req.query['supported-features'] as string | undefined;
   const ifNoneMatch = req.headers['if-none-match'] as string | undefined;
   const ifModifiedSince = req.headers['if-modified-since'] as string | undefined;
 
@@ -2387,7 +2368,6 @@ router.get('/group-data/group-identifiers', async (req: Request, res: Response) 
   const extGroupId = req.query['ext-group-id'] as string | undefined;
   const intGroupId = req.query['int-group-id'] as string | undefined;
   const ueIdInd = req.query['ue-id-ind'] === 'true';
-  const supportedFeatures = req.query['supported-features'] as string | undefined;
   const afId = req.query['af-id'] as string | undefined;
   const ifNoneMatch = req.get('If-None-Match');
   const ifModifiedSince = req.get('If-Modified-Since');
@@ -2525,7 +2505,6 @@ router.get('/shared-data/:sharedDataId', async (req: Request, res: Response) => 
 });
 
 router.get('/multiple-identifiers', async (req: Request, res: Response) => {
-  const supportedFeatures = req.query['supported-features'] as string | undefined;
   const gpsiListParam = req.query['gpsi-list'] as string | undefined;
   const supiListParam = req.query['supi-list'] as string | undefined;
   const afId = req.query['af-id'] as string | undefined;
@@ -2719,7 +2698,6 @@ router.get('/multiple-identifiers', async (req: Request, res: Response) => {
 
 router.get('/:supi/time-sync-data', async (req: Request, res: Response) => {
   const { supi } = req.params;
-  const supportedFeatures = req.query['supported-features'] as string | undefined;
   const ifNoneMatch = req.headers['if-none-match'] as string | undefined;
   const ifModifiedSince = req.headers['if-modified-since'] as string | undefined;
 
@@ -2799,7 +2777,6 @@ router.get('/:supi/time-sync-data', async (req: Request, res: Response) => {
 
 router.get('/:supi/ranging-slpos-data', async (req: Request, res: Response) => {
   const { supi } = req.params;
-  const supportedFeatures = req.query['supported-features'] as string | undefined;
   const ifNoneMatch = req.headers['if-none-match'] as string | undefined;
   const ifModifiedSince = req.headers['if-modified-since'] as string | undefined;
 
@@ -2883,7 +2860,6 @@ router.get('/:supi/ranging-slpos-data', async (req: Request, res: Response) => {
 
 router.get('/:supi/a2x-data', async (req: Request, res: Response) => {
   const { supi } = req.params;
-  const supportedFeatures = req.query['supported-features'] as string | undefined;
   const ifNoneMatch = req.headers['if-none-match'] as string | undefined;
   const ifModifiedSince = req.headers['if-modified-since'] as string | undefined;
 
@@ -2971,7 +2947,6 @@ router.get('/:supi/a2x-data', async (req: Request, res: Response) => {
 
 router.get('/:ueId/rangingsl-privacy-data', async (req: Request, res: Response) => {
   const { ueId } = req.params;
-  const supportedFeatures = req.query['supported-features'] as string | undefined;
   const ifNoneMatch = req.headers['if-none-match'] as string | undefined;
   const ifModifiedSince = req.headers['if-modified-since'] as string | undefined;
 

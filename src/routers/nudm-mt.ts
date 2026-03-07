@@ -26,7 +26,6 @@ interface StoredUeInfo {
 router.get('/:supi', async (req: Request, res: Response) => {
   const { supi } = req.params;
   const fields = req.query.fields;
-  const supportedFeatures = req.query['supported-features'];
 
   const supiPattern = /^(imsi-[0-9]{5,15}|nai-.+)$/;
   if (!supiPattern.test(supi)) {

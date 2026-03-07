@@ -21,6 +21,7 @@ import {
   IpSmGwInfo,
   AmfDeregInfo,
   DeregistrationData,
+  DeregistrationReason,
   PeiUpdateInfo,
   RoamingInfoUpdate,
   TriggerRequest,
@@ -1057,7 +1058,7 @@ router.put('/:ueId/registrations/smf-registrations/:pduSessionId', async (req: R
   }
 
   const pduSessionIdNum = parseInt(pduSessionId, 10);
-  if (isNaN(pduSessionIdNum) || pduSessionIdNum < 0 || pduSessionIdNum > 255) {
+  if (isNaN(pduSessionIdNum) || pduSessionIdNum < 1 || pduSessionIdNum > 255) {
     return res.status(400).json(createInvalidParameterError('Invalid pduSessionId'));
   }
 
@@ -1079,6 +1080,14 @@ router.put('/:ueId/registrations/smf-registrations/:pduSessionId', async (req: R
     return res.status(400).json(createMissingParameterError('Missing required field: plmnId'));
   }
 
+  if (!registration.emergencyServices && !registration.dnn) {
+    return res.status(400).json(createMissingParameterError('Missing required field: dnn (required when emergencyServices is not true)'));
+  }
+
+  if (!registration.registrationTime) {
+    registration.registrationTime = new Date().toISOString();
+  }
+
   try {
     const collection = await getCollection('smfRegistrations');
     const existingReg = await collection.findOne({ ueId, pduSessionId: pduSessionIdNum }) as SmfRegistration | null;
@@ -1089,15 +1098,41 @@ router.put('/:ueId/registrations/smf-registrations/:pduSessionId', async (req: R
       pduSessionId: pduSessionIdNum
     };
 
+    const responseBody = stripInternalFields<SmfRegistration>({ ...registrationData, _id: null });
+
     if (!existingReg) {
       await collection.insertOne(registrationData);
       const location = `${req.protocol}://${req.get('host')}/nudm-uecm/v1/${ueId}/registrations/smf-registrations/${pduSessionId}`;
       return res.status(201)
         .header('Location', location)
-        .json(registrationData);
+        .json(responseBody);
     } else {
+      const oldSmfInstanceId = (existingReg as any).smfInstanceId;
+      const oldDeregCallbackUri = (existingReg as any).deregCallbackUri;
+
       await collection.replaceOne({ ueId, pduSessionId: pduSessionIdNum }, registrationData);
-      return res.status(200).json(registrationData);
+
+      if (oldDeregCallbackUri && oldSmfInstanceId !== registration.smfInstanceId) {
+        const deregData: DeregistrationData = {
+          deregReason: DeregistrationReason.DUPLICATE_PDU_SESSION,
+          pduSessionId: pduSessionIdNum,
+          newSmfInstanceId: registration.smfInstanceId
+        };
+        fetch(oldDeregCallbackUri, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(deregData)
+        }).catch(err => {
+          logger.error('Failed to send deregistration callback to old SMF', {
+            ueId,
+            pduSessionId: pduSessionIdNum,
+            uri: oldDeregCallbackUri,
+            error: err
+          });
+        });
+      }
+
+      return res.status(200).json(responseBody);
     }
   } catch (error) {
     logger.error('Error creating/updating SMF registration', { error });
@@ -1118,7 +1153,7 @@ router.delete('/:ueId/registrations/smf-registrations/:pduSessionId', async (req
   }
 
   const pduSessionIdNum = parseInt(pduSessionId, 10);
-  if (isNaN(pduSessionIdNum) || pduSessionIdNum < 0 || pduSessionIdNum > 255) {
+  if (isNaN(pduSessionIdNum) || pduSessionIdNum < 1 || pduSessionIdNum > 255) {
     return res.status(400).json(createInvalidParameterError('Invalid pduSessionId'));
   }
 
@@ -1179,7 +1214,7 @@ router.get('/:ueId/registrations/smf-registrations/:pduSessionId', async (req: R
   }
 
   const pduSessionIdNum = parseInt(pduSessionId, 10);
-  if (isNaN(pduSessionIdNum) || pduSessionIdNum < 0 || pduSessionIdNum > 255) {
+  if (isNaN(pduSessionIdNum) || pduSessionIdNum < 1 || pduSessionIdNum > 255) {
     return res.status(400).json(createInvalidParameterError('Invalid pduSessionId'));
   }
 
@@ -1224,7 +1259,7 @@ router.patch('/:ueId/registrations/smf-registrations/:pduSessionId', async (req:
   }
 
   const pduSessionIdNum = parseInt(pduSessionId, 10);
-  if (isNaN(pduSessionIdNum) || pduSessionIdNum < 0 || pduSessionIdNum > 255) {
+  if (isNaN(pduSessionIdNum) || pduSessionIdNum < 1 || pduSessionIdNum > 255) {
     return res.status(400).json(createInvalidParameterError('Invalid pduSessionId'));
   }
 

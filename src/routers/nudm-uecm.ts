@@ -43,7 +43,8 @@ import {
   AccessType,
   PlmnId,
   RatType,
-  createNotImplementedError
+  createNotImplementedError,
+  createForbiddenError
 } from '../types/common-types';
 import { resolveGpsiToSupi } from '../db/sdm-db';
 import logger from '../utils/logger';
@@ -1233,6 +1234,11 @@ router.get('/:ueId/registrations/smf-registrations/:pduSessionId', async (req: R
 });
 
 router.patch('/:ueId/registrations/smf-registrations/:pduSessionId', async (req: Request, res: Response) => {
+  const contentType = req.headers['content-type'];
+  if (!contentType || !contentType.includes('application/merge-patch+json')) {
+    return res.status(415).json(createInvalidParameterError('Content-Type must be application/merge-patch+json'));
+  }
+
   const { ueId, pduSessionId } = req.params;
 
   if (!validateUeIdentity(ueId, ['imsi', 'nai', 'gli', 'gci'], true)) {
@@ -1252,31 +1258,37 @@ router.patch('/:ueId/registrations/smf-registrations/:pduSessionId', async (req:
 
   try {
     const collection = await getCollection('smfRegistrations');
-    const existingReg = await collection.findOne({ ueId, pduSessionId: pduSessionIdNum }) as SmfRegistration | null;
+    const existingReg = await collection.findOne({ ueId, pduSessionId: pduSessionIdNum }) as (SmfRegistration & { ueId?: string; _id?: any }) | null;
 
     if (!existingReg) {
-      return res.status(404).json({
-        type: 'urn:3gpp:error:application',
-        title: 'Not Found',
-        status: 404,
-        detail: 'SMF registration context not found',
-        cause: 'CONTEXT_NOT_FOUND'
-      });
+      return res.status(404).json(createNotFoundError('SMF registration context not found'));
     }
 
-    const updatedReg = deepMerge(existingReg, modification);
+    if (modification.smfSetId) {
+      if (existingReg.smfSetId !== modification.smfSetId) {
+        return res.status(403).json(createForbiddenError('SMF Set ID does not match the registered SMF Set ID'));
+      }
+    } else {
+      if (existingReg.smfInstanceId !== modification.smfInstanceId) {
+        return res.status(403).json(createForbiddenError('SMF Instance ID does not match the registered SMF Instance ID'));
+      }
+    }
 
-    await collection.replaceOne({ ueId, pduSessionId: pduSessionIdNum }, updatedReg);
+    const updateFields: Record<string, any> = {};
+    if (modification.pgwFqdn === null) {
+      updateFields.$unset = { pgwFqdn: '' };
+    } else if (modification.pgwFqdn !== undefined) {
+      updateFields.$set = { pgwFqdn: modification.pgwFqdn };
+    }
+
+    if (Object.keys(updateFields).length > 0) {
+      await collection.updateOne({ ueId, pduSessionId: pduSessionIdNum }, updateFields);
+    }
 
     return res.status(204).send();
   } catch (error) {
     logger.error('Error updating SMF registration', { error });
-    return res.status(500).json({
-      type: 'urn:3gpp:error:system',
-      title: 'Internal Server Error',
-      status: 500,
-      detail: 'An error occurred while updating SMF registration'
-    });
+    return res.status(500).json(createInternalError('An error occurred while updating SMF registration'));
   }
 });
 

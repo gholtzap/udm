@@ -116,6 +116,7 @@ export interface AmfNon3GppAccessRegistration {
   sorSnpnSiSupported?: boolean;
   udrRestartInd?: boolean;
   lastSynchronizationTime?: string;
+  ueSnpnSubscriptionInd?: boolean;
 }
 
 export interface SmfRegistration {

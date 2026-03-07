@@ -141,6 +141,10 @@ export interface SmfRegistration {
   resetIds?: string[];
   udrRestartInd?: boolean;
   lastSynchronizationTime?: string;
+  pduSessionReActivationRequired?: boolean;
+  staleCheckCallbackUri?: string;
+  udmStaleCheckCallbackUri?: string;
+  wildcardInd?: boolean;
 }
 
 export interface SmsfRegistration {

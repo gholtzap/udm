@@ -968,9 +968,11 @@ router.get('/:ueId/registrations/amf-non-3gpp-access', async (req: Request, res:
 router.get('/:ueId/registrations/smf-registrations', async (req: Request, res: Response) => {
   const { ueId } = req.params;
 
-  if (!validateUeIdentity(ueId, ['imsi', 'nai', 'msisdn', 'extid'], true)) {
+  if (!validateUeIdentity(ueId, ['imsi', 'nai', 'msisdn', 'extid', 'gci', 'gli'], true)) {
     return res.status(400).json(createInvalidParameterError('Invalid ueId format'));
   }
+
+  const supportedFeatures = req.query['supported-features'] as string | undefined;
 
   let singleNssai: Snssai | undefined;
   const singleNssaiParam = req.query['single-nssai'];
@@ -981,11 +983,11 @@ router.get('/:ueId/registrations/smf-registrations', async (req: Request, res: R
       } else {
         singleNssai = singleNssaiParam as unknown as Snssai;
       }
-      
+
       if (typeof singleNssai.sst !== 'number' || singleNssai.sst < 0 || singleNssai.sst > 255) {
         return res.status(400).json(createInvalidParameterError('Invalid single-nssai: sst must be a number between 0 and 255'));
       }
-      
+
       if (singleNssai.sd !== undefined && typeof singleNssai.sd !== 'string') {
         return res.status(400).json(createInvalidParameterError('Invalid single-nssai: sd must be a string'));
       }
@@ -1011,9 +1013,9 @@ router.get('/:ueId/registrations/smf-registrations', async (req: Request, res: R
       query.dnn = dnn;
     }
 
-    const registrations = await collection.find(query).toArray() as unknown as SmfRegistration[];
+    const docs = await collection.find(query).toArray();
 
-    if (registrations.length === 0) {
+    if (docs.length === 0) {
       return res.status(404).json({
         type: 'urn:3gpp:error:application',
         title: 'Not Found',
@@ -1022,6 +1024,14 @@ router.get('/:ueId/registrations/smf-registrations', async (req: Request, res: R
         cause: 'CONTEXT_NOT_FOUND'
       });
     }
+
+    const registrations = docs.map(d => {
+      const reg = stripInternalFields<SmfRegistration>(d as Record<string, any>);
+      if (supportedFeatures) {
+        reg.supportedFeatures = supportedFeatures;
+      }
+      return reg;
+    });
 
     const smfRegistrationInfo: SmfRegistrationInfo = {
       smfRegistrationList: registrations
@@ -1164,7 +1174,7 @@ router.delete('/:ueId/registrations/smf-registrations/:pduSessionId', async (req
 router.get('/:ueId/registrations/smf-registrations/:pduSessionId', async (req: Request, res: Response) => {
   const { ueId, pduSessionId } = req.params;
 
-  if (!validateUeIdentity(ueId, ['imsi', 'nai', 'msisdn', 'extid'], true)) {
+  if (!validateUeIdentity(ueId, ['imsi', 'nai', 'msisdn', 'extid', 'gci', 'gli'], true)) {
     return res.status(400).json(createInvalidParameterError('Invalid ueId format'));
   }
 
@@ -1172,6 +1182,8 @@ router.get('/:ueId/registrations/smf-registrations/:pduSessionId', async (req: R
   if (isNaN(pduSessionIdNum) || pduSessionIdNum < 0 || pduSessionIdNum > 255) {
     return res.status(400).json(createInvalidParameterError('Invalid pduSessionId'));
   }
+
+  const supportedFeatures = req.query['supported-features'] as string | undefined;
 
   try {
     const collection = await getCollection('smfRegistrations');
@@ -1187,7 +1199,12 @@ router.get('/:ueId/registrations/smf-registrations/:pduSessionId', async (req: R
       });
     }
 
-    return res.status(200).json(registration);
+    const response = stripInternalFields<SmfRegistration>(registration as any);
+    if (supportedFeatures) {
+      response.supportedFeatures = supportedFeatures;
+    }
+
+    return res.status(200).json(response);
   } catch (error) {
     logger.error('Error retrieving SMF registration', { error });
     return res.status(500).json({

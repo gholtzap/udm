@@ -1206,45 +1206,29 @@ router.delete('/:ueId/registrations/smf-registrations/:pduSessionId', async (req
 router.get('/:ueId/registrations/smf-registrations/:pduSessionId', async (req: Request, res: Response) => {
   const { ueId, pduSessionId } = req.params;
 
-  if (!validateUeIdentity(ueId, ['imsi', 'nai', 'msisdn', 'extid', 'gci', 'gli'], true)) {
-    return res.status(400).json(createInvalidParameterError('Invalid ueId format'));
+  if (!validateUeIdentity(ueId, ['imsi', 'nai', 'gci', 'gli'], true)) {
+    return res.status(400).contentType('application/problem+json').json(createInvalidParameterError('Invalid ueId format'));
   }
 
   const pduSessionIdNum = parseInt(pduSessionId, 10);
-  if (isNaN(pduSessionIdNum) || pduSessionIdNum < 1 || pduSessionIdNum > 255) {
-    return res.status(400).json(createInvalidParameterError('Invalid pduSessionId'));
+  if (isNaN(pduSessionIdNum) || pduSessionIdNum < 0 || pduSessionIdNum > 255) {
+    return res.status(400).contentType('application/problem+json').json(createInvalidParameterError('Invalid pduSessionId'));
   }
-
-  const supportedFeatures = req.query['supported-features'] as string | undefined;
 
   try {
     const collection = await getCollection('smfRegistrations');
     const registration = await collection.findOne({ ueId, pduSessionId: pduSessionIdNum }) as SmfRegistration | null;
 
     if (!registration) {
-      return res.status(404).json({
-        type: 'urn:3gpp:error:application',
-        title: 'Not Found',
-        status: 404,
-        detail: 'SMF registration context not found',
-        cause: 'CONTEXT_NOT_FOUND'
-      });
+      return res.status(404).contentType('application/problem+json').json(createNotFoundError('SMF registration context not found'));
     }
 
     const response = stripInternalFields<SmfRegistration>(registration as any);
-    if (supportedFeatures) {
-      response.supportedFeatures = supportedFeatures;
-    }
 
     return res.status(200).json(response);
   } catch (error) {
     logger.error('Error retrieving SMF registration', { error });
-    return res.status(500).json({
-      type: 'urn:3gpp:error:system',
-      title: 'Internal Server Error',
-      status: 500,
-      detail: 'An error occurred while retrieving SMF registration'
-    });
+    return res.status(500).contentType('application/problem+json').json(createInternalError('An error occurred while retrieving SMF registration'));
   }
 });
 

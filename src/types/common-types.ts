@@ -73,6 +73,26 @@ const UE_IDENTITY_PATTERNS = {
 
 export const suciPattern = /^suci-\d+-\d+-\d+-\d+-\d+-\d+-[\dA-Fa-f]+$/;
 
+export function deconcealSuci(suci: string): { supi: string } | { error: string } {
+  const parts = suci.split('-');
+  if (parts.length !== 8) {
+    return { error: 'Invalid SUCI format' };
+  }
+  const supiType = parseInt(parts[1], 10);
+  const mcc = parts[2];
+  const mnc = parts[3];
+  const protectionScheme = parseInt(parts[5], 10);
+  const schemeOutput = parts[7];
+
+  if (supiType !== 0) {
+    return { error: `Unsupported SUPI type: ${supiType}` };
+  }
+  if (protectionScheme !== 0) {
+    return { error: 'Only null scheme (0) SUCI de-concealment is supported' };
+  }
+  return { supi: `imsi-${mcc}${mnc}${schemeOutput}` };
+}
+
 export function validateUeIdentity(ueIdentity: string, allowedTypes?: (keyof typeof UE_IDENTITY_PATTERNS)[], allowCatchAll: boolean = false): boolean {
   if (!ueIdentity || ueIdentity.trim() === '') {
     return false;

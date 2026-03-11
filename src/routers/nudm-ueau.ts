@@ -24,7 +24,7 @@ import {
   ProSeAuthenticationInfoRequest,
   ProSeAuthenticationInfoResult
 } from '../types/nudm-ueau-types';
-import { createNotFoundError, createInvalidParameterError, createMissingParameterError, createNotImplementedError, createInternalError, createAuthenticationRejectedError, suciPattern, PlmnId, validateUeIdentity } from '../types/common-types';
+import { createNotFoundError, createInvalidParameterError, createMissingParameterError, createNotImplementedError, createInternalError, createAuthenticationRejectedError, suciPattern, PlmnId, validateUeIdentity, deconcealSuci } from '../types/common-types';
 import {
   generateRand,
   milenage,
@@ -89,16 +89,11 @@ router.post('/:supiOrSuci/security-information/generate-auth-data', async (req: 
   let supi = supiOrSuci;
 
   if (suciPattern.test(supiOrSuci)) {
-    auditLog('auth_vector_generation_failed', {
-      identifier_type: 'suci',
-      reason: 'suci_not_implemented'
-    }, 'Auth vector generation failed: SUCI de-concealment not implemented');
-    return res.status(501).json({
-      type: 'urn:3gpp:error:not-implemented',
-      title: 'Not Implemented',
-      status: 501,
-      detail: 'SUCI de-concealment is not yet implemented'
-    });
+    const result = deconcealSuci(supiOrSuci);
+    if ('error' in result) {
+      return res.status(501).json(createNotImplementedError(result.error));
+    }
+    supi = result.supi;
   }
 
   if (!supi.startsWith('imsi-')) {
@@ -427,7 +422,11 @@ router.get('/:supiOrSuci/security-information-rg', async (req: Request, res: Res
   let supi = supiOrSuci;
 
   if (suciPattern.test(supiOrSuci)) {
-    return res.status(501).json(createNotImplementedError('SUCI de-concealment is not yet implemented'));
+    const result = deconcealSuci(supiOrSuci);
+    if ('error' in result) {
+      return res.status(501).json(createNotImplementedError(result.error));
+    }
+    supi = result.supi;
   }
 
   if (!supi.startsWith('imsi-')) {
@@ -1432,7 +1431,11 @@ router.post('/:supiOrSuci/prose-security-information/generate-av', async (req: R
   let supi = supiOrSuci;
 
   if (suciPattern.test(supiOrSuci)) {
-    return res.status(501).json(createNotImplementedError('SUCI de-concealment is not yet implemented'));
+    const result = deconcealSuci(supiOrSuci);
+    if ('error' in result) {
+      return res.status(501).json(createNotImplementedError(result.error));
+    }
+    supi = result.supi;
   }
 
   if (!supi.startsWith('imsi-')) {
